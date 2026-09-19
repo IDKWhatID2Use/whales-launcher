@@ -5,6 +5,8 @@
 >
 > 仓库：<https://github.com/IDKWhatID2Use/whales-launcher>
 > 许可证：[Polyform Noncommercial 1.0.0](LICENSE) —— 非商业用途免费，**未经授权不得商用**
+>
+> 📘 **第一次用？直接看 [完整使用教程（图文）](docs/guide/README.md)** —— 从安装到日常使用，关键界面逐步配图。
 
 ---
 
@@ -238,6 +240,11 @@ npm run shortcut     # 重建桌面/开始菜单快捷方式
 npm run clean        # 清理 dist/
 ```
 
+> **教程截图是可复现的**：`npm run shots:tutorial` 会用无头 Chromium + CDP 驱动渲染层，
+> 按固定脚本走完各路由并截图到 `docs/assets/tutorial/` —— 界面改动后重跑一次即可，
+> 不会留下过期的文档图。加 `-- --list` 看全部场景，`-- --only <关键词>` 只跑其中几张。
+> 详见 [使用教程](docs/guide/README.md)。
+
 ---
 
 ## 目录结构（源码）
@@ -372,6 +379,7 @@ npm run launch -- --dry-run             # 启动链路自检（环境 + 按需�
 
 | 文档 | 内容 |
 |---|---|
+| [**使用教程（图文）**](docs/guide/README.md) | **面向使用者的完整指引：安装 → 五分钟上手 → 实例/引擎/插件/设置/存档管理 → 隔离与共享 → 故障排查。全部截图由脚本生成，可复现** |
 | [dsh 接口勘察](docs/research/dsh-interface.md) | dsh CLI、`$DSH_HOME` 解析、profile 结构、配置层组合顺序（均源码级确认） |
 | [总体设计方案](docs/design/architecture.md) | 概念映射、目录布局、分层架构、数据模型、核心流程、里程碑 |
 | [自动端口分配设计说明](docs/design/port-allocation.md) | 端口来源与源码依据、三层防护、决策顺序、边界情况、验收实测结果 |
