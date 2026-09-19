@@ -1,0 +1,71 @@
+# =============================================================================
+#  WhalesLauncher —— Git 忽略规则
+#
+#  ⚠ 关键：以下目录规则全部以 "/" 开头，锚定【仓库根目录】。
+#    本项目存在同名目录，不锚定会误伤必须上传的源码：
+#      src\shared\  ←→  运行时目录 \shared\
+#      tests\dist\  ←→  构建产物   \dist\
+#    写成 "shared/" 或 "dist/" 会把 src/shared/contracts.ts 与
+#    tests/dist/verify-dist.cjs 一并忽略掉。
+# =============================================================================
+
+# ------------------------------------------------------------------ 依赖缓存
+/node_modules/
+/.npm-cache/
+/.pnpm-store/
+
+# ------------------------------------------------------------------ 构建产物
+/dist/
+/dist.tmp/
+*.tsbuildinfo
+
+# ------------------------------------------- 运行时数据（本机真实数据，不入库）
+# instances/ 实例（内含 home、会话、工作区）
+# engines/   下载的 dsh 引擎版本
+# cache/     端口台账等运行缓存
+# logs/      启动器日志（含 logs/history/）
+# shared/    junction 共享存档目标
+/instances/
+/engines/
+/cache/
+/logs/
+/shared/
+
+# -------------------------------------------------- 本机专属配置（含私有路径）
+# launcher.json 由 src/main/config.ts:loadConfig() 在首次启动时自动生成
+# （默认 primaryHome = os.homedir()/.dsh），本机那份含真实用户名与实例 ID。
+/launcher.json
+/launcher.json.bak-*
+# .npmrc 含本机绝对缓存路径与 strict-ssl=false，入库无意义且有安全隐患。
+# 替代做法见 README「首次安装」一节的环境变量用法。
+/.npmrc
+
+# ------------------------------------------------------ 本机快捷方式回落目录
+# scripts/make-shortcut.ps1 在写桌面/开始菜单失败时，回落到项目内 .lnk
+/快捷方式/
+/WhalesLauncher shortcut/
+
+# ------------------------------------------------------------ 实验 / QA 工作区
+# .spike/ 内含指向真实 ~/.dsh/profiles 的 junction，以及大量本机 QA 产物
+# （*.txt / *.err / 临时 root 目录 / jsdom 的 node_modules），整体不入库。
+# 若日后要公开 .spike/smoke 下的渲染层冒烟脚本，请改为逐条排除：
+#     /.spike/*
+#     !/.spike/smoke/
+#     /.spike/smoke/node_modules/
+#   并同时修正脚本内的 F:\WhalesLauncher 硬编码路径。
+/.spike/
+
+# ------------------------------------------------------------ 日志与临时文件
+*.log
+*.tmp
+*.bak
+*.orig
+*.swp
+*~
+
+# ------------------------------------------------------------ 编辑器与系统
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/

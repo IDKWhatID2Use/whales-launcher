@@ -1,0 +1,323 @@
+/* ============================================================================
+   WhalesLauncher 设计令牌 —— Windows 11 Fluent 版（v2 / WCO）
+   依据：docs/design/ui-redesign.md §7.1 / §7.2 / §7.3
+         docs/design/ui-acceptance-criteria.md §1.1 / §1.3 / §1.6
+
+   层级纪律（判据 M）：
+     ① Mica 底 → ② 外壳面（半透明）→ ③ 内容面（不透明）→ ④ 浮层面（不透明 + 唯一投影层）
+   除 ④ 之外不得使用投影；全窗口不得使用渐变（.boot 与品牌标记为已登记例外）；
+   层级只由面板色阶梯与 1px 描边表达；hover / active 一律不得位移。
+   ========================================================================== */
+
+:root {
+  color-scheme: dark;
+
+  /* ══ 品牌与语义色 ═══════════════════════════════════════════════ */
+  --accent: #4d8dff;
+  --accent-hover: #6ba0ff;
+  /* 按下态需比基色更暗但又要满足 --accent-ink 的 4.5:1（#3a76e0 仅 4.40:1） */
+  --accent-press: #3f7ce8;
+  /* 主按钮文字：深色主题用深墨（对 --accent = 6.6:1），浅色主题用白字 */
+  --accent-ink: #0b1017;
+  --accent-softer: rgba(77, 141, 255, 0.08);
+  --accent-soft: rgba(77, 141, 255, 0.16);
+  --accent-border: rgba(77, 141, 255, 0.55);
+  --accent-text: #9dc0ff;
+
+  --brand-a: #4d8dff;
+  --brand-b: #2b5fd0;
+
+  --success: #35c98a;
+  --success-soft: rgba(53, 201, 138, 0.14);
+  --success-border: rgba(53, 201, 138, 0.42);
+  --success-text: #6ee0ae;
+
+  --warning: #f0a934;
+  --warning-soft: rgba(240, 169, 52, 0.14);
+  --warning-border: rgba(240, 169, 52, 0.42);
+  --warning-text: #ffc670;
+
+  --danger: #f2555a;
+  --danger-hover: #ff6f74;
+  --danger-press: #d84146;
+  /* 危险「实心」按钮：**为可访问性而刻意偏离亮红**，不是随手取值。
+     本项目的亮红 --danger(#f2555a) 压白字只有 3.37:1，达不到 AA 的 4.5:1；
+     而 WinUI 3 的 critical 按钮本身就是深红 #C42B1C + 白字（5.66:1）。
+     因此实心档单列三件套（rest/hover/press 分别 5.66 / 4.93 / 7.26:1），
+     --danger 继续用于徽标、日志 stderr 侧条、柔色危险按钮等"亮红"语义场景。
+     依据：ui-acceptance-criteria.md C1-4；偏离登记见 src/renderer/PREVIEW.md §7（Lead 已批准）。 */
+  --danger-solid: #c42b1c;
+  --danger-solid-hover: #d13438;
+  --danger-solid-press: #a4262c;
+  --danger-ink: #ffffff;
+  --danger-soft: rgba(242, 85, 90, 0.14);
+  --danger-border: rgba(242, 85, 90, 0.45);
+  --danger-text: #ff979b;
+
+  --info: #4d8dff;
+  --info-soft: rgba(77, 141, 255, 0.14);
+  --info-text: #9dc0ff;
+
+  --neutral-soft: rgba(255, 255, 255, 0.07);
+  --neutral-text: #a9b8cc;
+
+  /* ══ 实例状态色（颜色只是辅助通道，必须同时有文字标签与形状） ═══ */
+  --state-running: #35c98a;
+  --state-starting: #f0a934;
+  --state-stopping: #8296ae; /* 中性：停止是「回到静止」，不引入第五种色相 */
+  --state-stopped: #8296ae;
+  --state-crashed: #f2555a;
+
+  /* ══ Mica 与表面层级 ═══════════════════════════════════════════ */
+  --material-fallback: #0b1017;
+  --mica-opacity: 0.8;
+  --content-bg: rgba(11, 16, 23, 0.82);
+  --rail-bg: rgba(14, 20, 29, 0.88);
+  --titlebar-tint: rgba(10, 14, 20, 0.18);
+  /* 标题栏合成色；主进程 titleBarOverlay.color 取实心近似 #10151d（§2.5 / §7.4） */
+  --titlebar-surface: rgba(31, 37, 47, 0.9);
+
+  /* ══ 面板色阶梯（越浮越亮） ════════════════════════════════════ */
+  --bg-app: #0b1017;
+  --bg-surface: #131a25;
+  --bg-surface-2: #192231;
+  --bg-elevated: #1d2839;
+  --bg-inset: #080c11;
+  --bg-hover: rgba(255, 255, 255, 0.05);
+  --bg-active: rgba(255, 255, 255, 0.09);
+  --bg-selected: rgba(77, 141, 255, 0.16);
+  --scrim: rgba(3, 6, 11, 0.66);
+  --grid-line: rgba(255, 255, 255, 0.04);
+
+  /* ══ 描边（FL5-2） ══════════════════════════════════════════════
+     已按规范把 alpha 从 .10/.13 提到 .20/.38（深色合成后 1.67–2.22:1、
+     浅色 2.34–3.32:1），**刻意不再往上加**：WCAG 1.4.11 的 3:1 只适用于
+     "理解内容所必需"的非文本信息，而本项目所有控件都带文字/图标标签，
+     边界不是唯一识别特征；把它加重到 3:1 反而会偏离用户要求的 Win11 原生 Fluent。
+     Lead 已裁决维持此程度（登记见 src/renderer/PREVIEW.md §7）。 */
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border: rgba(255, 255, 255, 0.2);
+  --border-strong: rgba(255, 255, 255, 0.3);
+
+  /* ══ 文本 ═══════════════════════════════════════════════════════ */
+  --text-1: #e9eef7;
+  --text-2: #a2b2c8;
+  /* 实测：原 #71839a 对 --bg-elevated 仅 3.83:1；提亮后三级文字在
+     bg-app/bg-surface/bg-elevated 三档上均 ≥ 4.5:1 */
+  --text-3: #8296ae;
+  --text-disabled: #55647a;
+  --text-on-accent: #ffffff;
+
+  /* ══ 字体（Win11：Segoe UI Variable 优先，中文自然回退） ═══════ */
+  --font-ui: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei",
+    system-ui, sans-serif;
+  --font-display: "Segoe UI Variable Display", "Segoe UI Semibold", "Segoe UI",
+    "Microsoft YaHei UI", sans-serif;
+  --font-mono: "Cascadia Mono", "JetBrains Mono", "Sarasa Mono SC", Consolas, "Courier New",
+    monospace;
+
+  /* ══ 字号 / 行高 / 字重（字重只用 4 级） ═══════════════════════ */
+  --fs-titlebar: 14px;
+  --fs-xs: 11px;
+  --fs-sm: 12px;
+  --fs-md: 13px;
+  --fs-lg: 15px;
+  --fs-xl: 18px;
+  --fs-2xl: 22px;
+  --fs-3xl: 28px;
+
+  --lh-tight: 1.3;
+  --lh-normal: 1.55;
+  --lh-code: 1.65;
+  --lh-chrome: 1;
+
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+  --fw-bold: 700;
+
+  /* ══ 间距（4/8 梯度） ══════════════════════════════════════════ */
+  --sp-0: 0;
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-7: 28px;
+  --sp-8: 32px;
+  --sp-10: 40px;
+  --sp-12: 48px;
+
+  /* ══ 圆角（Fluent 四档 + full） ════════════════════════════════ */
+  --r-nav: 2px; /* 导航项、页签、徽标、20px 应用标记 */
+  --r-sm: 4px; /* 控件、菜单项、卡片内件 */
+  --r-md: 8px; /* 按钮、卡片、菜单面板、模态 */
+  --r-lg: 12px; /* 卡片外框 */
+  --r-full: 999px;
+
+  /* ══ 阴影（三级；浮层专属） ════════════════════════════════════ */
+  --shadow-s1: 0 1px 2px rgba(0, 0, 0, 0.3), 0 1px 1px rgba(0, 0, 0, 0.2);
+  --shadow-s2: 0 4px 14px rgba(0, 0, 0, 0.34), 0 1px 3px rgba(0, 0, 0, 0.24);
+  --shadow-s3: 0 18px 52px rgba(0, 0, 0, 0.5), 0 6px 16px rgba(0, 0, 0, 0.34);
+  --shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  --ring: 0 0 0 3px var(--accent-soft);
+  --ring-danger: 0 0 0 3px var(--danger-soft);
+  --ring-titlebar: inset 0 0 0 2px var(--accent);
+
+  /* ══ 动效（只用令牌，不得自定义时长） ══════════════════════════ */
+  --dur-fast: 100ms;
+  --dur-1: 120ms;
+  --dur-2: 160ms;
+  --dur-3: 220ms;
+  --dur-spin: 0.9s;
+  --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --ease-out-fluent: cubic-bezier(0.1, 0.9, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* ══ 标题栏 / 菜单 ═════════════════════════════════════════════ */
+  --titlebar-h: 48px; /* 必须 === titleBarOverlay.height */
+  --titlebar-pad-x: 12px;
+  --titlebar-gap: 12px;
+  --titlebar-drag-min: 160px;
+  --titlebar-title-max: 40ch;
+  --wco-w: 138px; /* 由 titlebar.ts 覆盖；无 WCO 环境归 0 */
+  --menubar-h: 0px;
+  --menu-min-w: 220px;
+  --menu-max-w: 340px;
+  --menu-max-h: 480px;
+  --menu-item-h: 32px;
+  --menu-trigger-h: 28px;
+  --menu-gap-y: 4px;
+  --menu-gap-x: 2px;
+
+  /* ══ 控件与条形尺寸（控件档 ≤ 5） ══════════════════════════════ */
+  --ctl-h-sm: 24px;
+  --ctl-h-md: 32px;
+  --ctl-h-lg: 40px;
+  --ctl-h-badge: 20px;
+  --ctl-h-titlebar: 28px; /* 第 5 档：标题栏内图标按钮（§3.4 已登记） */
+  --nav-item-h: 36px;
+  --bar-h-view: 44px;
+  --bar-h-panel: 40px;
+  --touch-min: 24px;
+  --icon-badge: 12px;
+  --icon-sm: 14px;
+  --icon-slot: 16px;
+  --icon-lg: 20px;
+  --icon-mark: 14px;
+
+  /* ══ 图形尺寸（非控件，登记为「图形档」） ══════════════════════ */
+  --avatar-sm: 24px;
+  --avatar-md: 32px;
+  --avatar-lg: 44px;
+  --icon-block: 36px;
+  --art-lg: 72px;
+  --art-sm: 48px;
+  --search-w: 300px;
+  --state-dot: 6px;
+  --side-bar-w: 2px; /* 语义侧条统一 2px（toast / 日志行） */
+
+  /* ══ 布局 ══════════════════════════════════════════════════════ */
+  --rail-w: 264px;
+  --rail-w-narrow: 216px;
+  --rail-w-icon: 72px;
+  --drawer-w: 424px;
+  --content-max: 1560px;
+  --modal-w-sm: 432px;
+  --modal-w-md: 560px;
+  --modal-w-lg: 760px;
+  --modal-w-xl: 920px;
+
+  /* ══ 层级（不新增） ════════════════════════════════════════════ */
+  --z-rail: 10;
+  --z-topbar: 20;
+  --z-drawer: 30;
+  --z-menu: 60;
+  --z-modal: 80;
+  --z-toast: 100;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --accent: #2f6fdd;
+  /* 实测：原 #3d7ce8 压白字仅 4.00:1；改 #3670d6 后 4.73:1 */
+  --accent-hover: #3670d6;
+  --accent-press: #2559b8;
+  --accent-ink: #ffffff;
+  --accent-softer: rgba(47, 111, 221, 0.07);
+  --accent-soft: rgba(47, 111, 221, 0.14);
+  --accent-border: rgba(47, 111, 221, 0.55);
+  --accent-text: #2a63c9;
+
+  --brand-a: #2f6fdd;
+  --brand-b: #1d4fae;
+
+  --success: #12a06a;
+  --success-soft: rgba(18, 160, 106, 0.12);
+  --success-border: rgba(18, 160, 106, 0.4);
+  --success-text: #0d7d52;
+
+  --warning: #c47f0a;
+  --warning-soft: rgba(196, 127, 10, 0.13);
+  --warning-border: rgba(196, 127, 10, 0.4);
+  --warning-text: #9a6408;
+
+  --danger: #dc3f45;
+  --danger-hover: #e6555b;
+  --danger-press: #bf3036;
+  --danger-soft: rgba(220, 63, 69, 0.11);
+  --danger-border: rgba(220, 63, 69, 0.45);
+  --danger-text: #bd2f35;
+
+  --info: #2f6fdd;
+  --info-soft: rgba(47, 111, 221, 0.12);
+  --info-text: #2a63c9;
+
+  --neutral-soft: rgba(15, 28, 48, 0.06);
+  --neutral-text: #52627a;
+
+  --state-running: #12a06a;
+  --state-starting: #c47f0a;
+  --state-stopping: #6f8098;
+  --state-stopped: #6f8098;
+  --state-crashed: #dc3f45;
+
+  --material-fallback: #f3f6fb;
+  --mica-opacity: 0.72;
+  --content-bg: rgba(243, 246, 251, 0.8);
+  --rail-bg: rgba(252, 253, 255, 0.86);
+  --titlebar-tint: rgba(255, 255, 255, 0.62);
+  /* 主进程 titleBarOverlay.color 取实心近似 #fbfcfe（§7.4） */
+  --titlebar-surface: rgba(250, 251, 254, 0.92);
+
+  --bg-app: #f3f6fb;
+  --bg-surface: #ffffff;
+  --bg-surface-2: #f6f8fc;
+  --bg-elevated: #ffffff;
+  --bg-inset: #eef2f8;
+  --bg-hover: rgba(15, 28, 48, 0.05);
+  --bg-active: rgba(15, 28, 48, 0.08);
+  --bg-selected: rgba(47, 111, 221, 0.12);
+  --scrim: rgba(24, 34, 50, 0.42);
+  --grid-line: rgba(15, 28, 48, 0.05);
+
+  --border-subtle: rgba(15, 28, 48, 0.07);
+  /* 提高 alpha：控件唯一视觉边界（原 .13 合成后仅 1.30:1） */
+  --border: rgba(15, 28, 48, 0.38);
+  --border-strong: rgba(15, 28, 48, 0.5);
+
+  --text-1: #131c29;
+  --text-2: #4c5c73;
+  /* 实测：原 #78889e 对 #f3f6fb 仅 3.31:1、#6b7a90 仅 4.03:1；
+     #616f85 在 bg-app/bg-surface/bg-elevated 三档上均 ≥ 4.5:1 */
+  --text-3: #616f85;
+  --text-disabled: #9aa7b8;
+  --text-on-accent: #ffffff;
+
+  --shadow-s1: 0 1px 2px rgba(20, 32, 52, 0.08), 0 1px 1px rgba(20, 32, 52, 0.05);
+  --shadow-s2: 0 4px 14px rgba(20, 32, 52, 0.1), 0 1px 3px rgba(20, 32, 52, 0.07);
+  --shadow-s3: 0 18px 52px rgba(20, 32, 52, 0.18), 0 6px 16px rgba(20, 32, 52, 0.1);
+  --shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}

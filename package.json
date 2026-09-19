@@ -1,0 +1,33 @@
+{
+  "name": "whales-launcher",
+  "version": "1.0.0",
+  "private": true,
+  "description": "WhalesLauncher —— DeepSeek Harness (dsh) 的实例与版本管理启动器",
+  "type": "module",
+  "main": "dist/main/index.cjs",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "postinstall": "node scripts/setup-electron.mjs",
+    "setup:electron": "node scripts/setup-electron.mjs",
+    "launch": "node scripts/launch.mjs",
+    "start": "node scripts/launch.mjs --rebuild",
+    "icon": "node scripts/make-icon.mjs",
+    "shortcut": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/make-shortcut.ps1",
+    "typecheck": "node node_modules/typescript/bin/tsc --noEmit",
+    "test": "node --test --test-isolation=none \"tests/**/*.test.mjs\"",
+    "test:core": "node --test --test-isolation=none \"tests/core/*.test.mjs\"",
+    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\""
+  },
+  "dependencies": {
+    "adm-zip": "^0.5.16",
+    "js-yaml": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/adm-zip": "^0.5.7",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^22.10.2",
+    "esbuild": "^0.24.2",
+    "electron": "41.1.0",
+    "typescript": "^5.7.2"
+  }
+}

@@ -1,0 +1,31 @@
+# =============================================================================
+#  WhalesLauncher —— Git 属性
+#
+#  存在的理由：README 与源码注释多处声明「.bat / .vbs 必须是纯 ASCII」——
+#  因为 cmd 按活动代码页读取批处理、wscript 按 ANSI 读取 VBS。若 Git 在
+#  检出时改写行尾或编码（core.autocrlf 在不同机器上取值不同），这两个入口
+#  会直接失效。此处把行尾固定下来，使 clone 结果与开发机一致。
+# =============================================================================
+
+# 默认：文本文件入库统一 LF，检出时按平台自动处理
+* text=auto eol=lf
+
+# Windows 脚本入口：必须保持 CRLF，否则 cmd / wscript 行为可能改变
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+*.vbs  text eol=crlf
+*.ps1  text eol=crlf
+
+# 二进制资源：禁止任何行尾与编码转换
+*.ico  binary
+*.png  binary
+*.jpg  binary
+*.zip  binary
+*.exe  binary
+*.dll  binary
+*.node binary
+
+# 语言统计：把生成物与锁文件从 GitHub 语言占比中排除
+package-lock.json  linguist-generated=true -diff
+dist/*             linguist-generated=true
+docs/assets/*.png  linguist-documentation
