@@ -96,7 +96,8 @@ start .\dist\renderer\index.html      # 或直接用浏览器打开该文件
 - [x] 实例列表（卡片/搜索/排序/筛选/空态）、向导四步、详情四页签、版本管理、全局设置
 - [x] 五个历史缺陷不回归：演示后端引擎登记时序、插件页依赖列表挂载、向导「下一步」随输入刷新、模态 Esc 捕获阶段、版本管理页无限加载态
 
-**需实机截图核对的项**（jsdom 无布局引擎，无法自动断言；可用 `.spike/cdp-shot.mjs` 复跑）
+**需实机截图核对的项**（jsdom 无布局引擎，无法自动断言；像素级截图用
+`node scripts/make-tutorial-shots.mjs` 复跑，产物落在 `docs/assets/tutorial/`）
 
 - [ ] 窄窗口（1280，`minWidth` 1024）下标题栏按钮不重叠、不越过 WCO 边界（x > 宽 − 138）
 - [ ] 标题栏与左实例栏无水平色缝（y = 2/24/46 取色，ΔRGB ≤ 2）
@@ -118,6 +119,10 @@ start .\dist\renderer\index.html      # 或直接用浏览器打开该文件
 
 ## 8. 已知限制
 
-- 本会话沙箱禁止创建命名管道，**Chromium/Edge 无法启动**，渲染层不自带像素级截图能力；像素观感由 Lead 用更宽权限实跑 Electron 核对。
+- 本会话沙箱禁止创建命名管道，**Electron 实机窗口无法在此启动**，因此窗口级观感（拖动、双击最大化、
+  Snap Layouts、三按钮 hover、Mica 合成）仍需在普通桌面环境复核。
+  但**渲染层自身的像素级截图能力是具备的** —— `node scripts/make-tutorial-shots.mjs` 用
+  **无头 Chromium + CDP** 驱动渲染层，按固定脚本走完各路由、模拟交互并逐张截图
+  （`docs/assets/tutorial/` 的教程截图即由它生成），不需要 GPU 与桌面合成器。
 - 功能与样式断言见 `.spike/smoke/`（用法与断言纪律见该目录 `README.md`）：`run.mjs`（155 项交互断言，演示后端）、`real-mode.mjs`（28 项，真实 `window.whales` 桩）、`dist-copy.mjs`（产物文案核验）、`audit.mjs`（CSS 类名一致性）、`contrast.mjs`（WCAG 对比度核算）。两条冒烟都支持 `WL_RENDERER_DIR` 指向隔离构建，便于在不动共享 `dist` 的前提下验证。
 - `real-mode.mjs` 的 `check()` 此前不调用函数型断言（函数对象恒为真 → 假绿）；本轮已修正为与 `run.mjs` 一致（只承认严格 `true`），因此断言总数从 20 增至 28 且全部真实执行。
