@@ -73,8 +73,14 @@ export function onRouteChange(listener: (route: Route) => void): () => void {
 export function startRouter(): void {
   window.addEventListener('hashchange', notify);
   if (!window.location.hash) {
+    // 没有 hash：`replace` 会异步抛出一次 hashchange，由那次事件完成首屏挂载。
+    // 这里**不能**再主动 notify 一次，否则同一路由会被挂载两遍。
     window.location.replace('#/instances');
+    return;
   }
+  // 已经带 hash（F5 / Ctrl+R 刷新后，或外部直接以带 hash 的地址加载）：
+  // hashchange 不会再触发，必须主动通知一次。否则外壳在、主区永远空白。
+  // 调用方必须先 `onRouteChange(...)` 注册监听者，再调用本函数。
   notify();
 }
 

@@ -124,11 +124,13 @@ async function boot(): Promise<void> {
 
   shell = createShell(ctx);
   startClock();
-  startRouter();
+  // 监听者必须先于 `startRouter()` 注册：URL 已带 hash 时（F5 / Ctrl+R 刷新正是这种情形）
+  // startRouter() 会**同步**通知一次首屏，此刻若还没有监听者，界面就只剩外壳、主区空白。
   onRouteChange((route) => {
     shell.syncRoute(route);
     mount(route);
   });
+  startRouter();
 
   installShortcuts();
 
