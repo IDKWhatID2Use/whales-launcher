@@ -76,7 +76,7 @@
 分组（与 `CH` 同构）：`launcher:`、`instance:`、`engine:`、`plugin:`、`settings:`、`saves:`、`pack:`、`app:`。
 
 **唯一事实源**：`src/shared/contracts.ts` 的 `CH` 与 `WhalesApi`。
-**参数校验的唯一事实源**：`src/main/ipc.ts` 的既有 handler（`must*` / `parseCreateInput` / `parseUpdatePatch` 白名单等）。**桥接层必须原样搬运这些校验，不得放宽。**
+**参数校验的实现位置**：`desktop/bridge/validate.mjs`。这些校验原先来自 Electron 主进程的 `src/main/ipc.ts`（`must*` / `parseCreateInput` / `parseUpdatePatch` 白名单等），已**原样搬运、不放宽**。`src/main/**` 已于 commit `ed93af9` 物理删除；如需比对历史实现，用 `git show ed93af9^:src/main/ipc.ts`。
 
 ### 3.2 内建方法（`__` 前缀，非业务）
 
@@ -128,7 +128,7 @@
 ## 5. 实现约定
 
 1. **Node 侧入口**：`desktop/bridge/server.mjs`（esbuild 打包为单文件，产物 `dist/bridge/server.cjs`）。
-2. **复用而非重写**：Node 侧必须复用 `src/core`（`CoreApi`）与 `src/main/ipc.ts` 的 handler 逻辑。若某段逻辑与 Electron 强耦合，应**抽出参数层**再复用，不要复制粘贴成第二份实现。
+2. **复用而非重写**：Node 侧复用 `src/core`（`CoreApi`）；原 `src/main/ipc.ts` 的 handler 逻辑已搬运到 `desktop/bridge/validate.mjs` + `desktop/bridge/server.mjs`，**不得再复制粘贴出第二份实现**。桥接对 `src/core` 的运行时 import 只有 3 条（`config-store.mjs` / `events.mjs` / `server.mjs` 各一条），没有 Electron 适配层残留。
 3. **契约漂移防护**：方法名列表由 `CH` 常量在运行时导出，`__handshake` 返回真实列表；C# 侧在开发期断言两边一致，不一致直接失败。
 4. **C# 侧客户端**：`Services/CoreBridge.cs`，负责进程生命周期、NDJSON 读写、id 分配、请求-响应配对（`TaskCompletionSource`）、事件分发、宿主方法注册。
 5. **测试**：桥接层必须具备可脱离 UI 的冒烟测试 —— 直接向 stdin 喂请求、读 stdout 断言。纳入 `scripts/audit/`。

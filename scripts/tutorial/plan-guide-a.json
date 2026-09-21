@@ -1,0 +1,304 @@
+{
+  "schema": "whaleslauncher.tutorial.plan/1",
+  "description": "Guide screenshots, batch A: instance list, search, filter, log drawer, app menu, card menu, dialogs, running/crashed state, detail tabs, engines, settings. Navigation is done through the UI (rail items, card buttons, tabs) because the smoke route races the very first page load for create/settings.",
+  "exe": "F:\\WhalesLauncher\\desktop\\src\\WhalesLauncher.App\\bin\\Debug\\net10.0-windows10.0.26100.0\\win-x64\\WhalesLauncher.exe",
+  "home": "F:\\Temp\\whales-tutorial-home",
+  "outDir": "F:\\WhalesLauncher\\docs\\assets\\tutorial",
+  "sessions": [
+    {
+      "id": "instances-main",
+      "route": "instances",
+      "waitMs": 10000,
+      "shots": [
+        {
+          "name": "01-instance-list",
+          "steps": [
+            { "Type": "wait", "Ms": 1500 }
+          ]
+        },
+        {
+          "name": "03-search",
+          "baseline": "01-instance-list",
+          "steps": [
+            { "Type": "uia", "Action": "focus", "Ct": "Edit", "Name": "搜索实例", "TimeoutMs": 4000 },
+            { "Type": "wait", "Ms": 400 },
+            { "Type": "text", "Value": "实例" },
+            { "Type": "wait", "Ms": 1200 }
+          ]
+        },
+        {
+          "name": "22-empty-search",
+          "baseline": "03-search",
+          "steps": [
+            { "Type": "text", "Value": "zzz" },
+            { "Type": "wait", "Ms": 1200 }
+          ]
+        },
+        {
+          "name": "_clear-search",
+          "scratch": true,
+          "steps": [
+            { "Type": "key", "Chord": "Ctrl+A" },
+            { "Type": "wait", "Ms": 200 },
+            { "Type": "key", "Chord": "Delete" },
+            { "Type": "wait", "Ms": 1200 }
+          ]
+        },
+        {
+          "name": "02-filter-needs-attention",
+          "baseline": "01-instance-list",
+          "steps": [
+            { "Type": "uia", "Action": "select", "Ct": "ListItem", "Name": "需处理", "TimeoutMs": 4000 },
+            { "Type": "wait", "Ms": 1500 }
+          ]
+        },
+        {
+          "name": "_reset-filter",
+          "scratch": true,
+          "steps": [
+            { "Type": "uia", "Action": "select", "Ct": "ListItem", "Name": "全部", "TimeoutMs": 4000 },
+            { "Type": "wait", "Ms": 1200 }
+          ]
+        },
+        {
+          "name": "06-log-drawer",
+          "baseline": "01-instance-list",
+          "steps": [
+            { "Type": "key", "Chord": "Ctrl+L" },
+            { "Type": "wait", "Ms": 2500 },
+            { "Type": "uia", "Action": "dump" }
+          ]
+        },
+        {
+          "name": "_close-drawer",
+          "scratch": true,
+          "steps": [
+            { "Type": "key", "Chord": "Ctrl+L" },
+            { "Type": "wait", "Ms": 1500 }
+          ]
+        },
+        {
+          "name": "04-app-menu",
+          "mode": "screen",
+          "baseline": "01-instance-list",
+          "steps": [
+            { "Type": "uia", "Action": "expand", "Ct": "MenuItem", "Name": "文件", "TimeoutMs": 5000 },
+            { "Type": "wait", "Ms": 1200 },
+            { "Type": "uia", "Action": "dump" }
+          ]
+        },
+        {
+          "name": "_close-app-menu",
+          "scratch": true,
+          "steps": [
+            { "Type": "key", "Chord": "Escape" },
+            { "Type": "wait", "Ms": 1200 }
+          ]
+        },
+        {
+          "name": "05-card-more-menu",
+          "mode": "screen",
+          "baseline": "01-instance-list",
+          "steps": [
+            { "Type": "uia", "Action": "clickcenter", "Ct": "Button", "Name": "更多操作", "Index": 0, "TimeoutMs": 5000 },
+            { "Type": "wait", "Ms": 1500 },
+            { "Type": "uia", "Action": "dump" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "overlays-dialog",
+      "route": "instances",
+      "waitMs": 10000,
+      "shots": [
+        {
+          "name": "_open-card-menu",
+          "scratch": true,
+          "steps": [
+            { "Type": "uia", "Action": "clickcenter", "Ct": "Button", "Name": "更多操作", "Index": 0, "TimeoutMs": 5000 },
+            { "Type": "wait", "Ms": 1500 }
+          ]
+        },
+        {
+          "name": "19-edit-instance",
+          "mode": "screen",
+          "baseline": "05-card-more-menu",
+          "steps": [
+            { "Type": "uia", "Action": "invoke", "Ct": "MenuItem", "Name": "编辑实例设置", "TimeoutMs": 5000 },
+            { "Type": "wait", "Ms": 3000 },
+            { "Type": "uia", "Action": "focus", "Aid": "NameBox", "IncludeOffscreen": true, "TimeoutMs": 6000 },
+            { "Type": "wait", "Ms": 1500 },
+            { "Type": "uia", "Action": "dump" }
+          ]
+        },
+        {
+          "name": "_back-to-instances",
+          "scratch": true,
+          "steps": [
+            { "Type": "uia", "Action": "invoke", "Ct": "Button", "Name": "返回", "TimeoutMs": 5000 },
+            { "Type": "wait", "Ms": 3000 }
+          ]
+        },
+        {
+          "name": "_open-card-menu-2",
+          "scratch": true,
+          "steps": [
+            { "Type": "uia", "Action": "clickcenter", "Ct": "Button", "Name": "更多操作", "Index": 0, "TimeoutMs": 5000 },
+            { "Type": "wait", "Ms": 1500 },
+            { "Type": "uia", "Action": "dump" }
+          ]
+        },
+        {
+          "name": "20-delete-confirm",
+          "mode": "screen",
+          "baseline": "05-card-more-menu",
+          "steps": [
+            { "Type": "uia", "Action": "invoke", "Ct": "MenuItem", "Name": "删除实例", "TimeoutMs": 5000 },
+            { "Type": "wait", "Ms": 2000 },
+            { "Type": "uia", "Action": "dump" }
+          ]
+        },
+        {
+          "name": "_close-delete",
+          "scratch": true,
+          "steps": [
+            { "Type": "key", "Chord": "Escape" },
+            { "Type": "wait", "Ms": 1500 }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "detail-tabs",
+      "route": "instances",
+      "waitMs": 10000,
+      "shots": [
+        {
+          "name": "11-detail-plugins",
+          "steps": [
+            { "Type": "uia", "Action": "clickcenter", "Ct": "Button", "Name": "查看实例详情", "Index": 0, "TimeoutMs": 5000 },
+            { "Type": "wait", "Ms": 3000 },
+            { "Type": "uia", "Action": "dump" }
+          ]
+        },
+        {
+          "name": "12-detail-settings",
+          "baseline": "11-detail-plugins",
+          "steps": [
+            { "Type": "uia", "Action": "select", "Ct": "ListItem", "Name": "设置", "TimeoutMs": 4000 },
+            { "Type": "wait", "Ms": 2000 }
+          ]
+        },
+        {
+          "name": "13-detail-saves",
+          "baseline": "11-detail-plugins",
+          "steps": [
+            { "Type": "uia", "Action": "select", "Ct": "ListItem", "Name": "存档", "TimeoutMs": 4000 },
+            { "Type": "wait", "Ms": 2000 }
+          ]
+        },
+        {
+          "name": "14-detail-logs",
+          "baseline": "11-detail-plugins",
+          "steps": [
+            { "Type": "uia", "Action": "select", "Ct": "ListItem", "Name": "日志", "TimeoutMs": 4000 },
+            { "Type": "wait", "Ms": 2000 },
+            { "Type": "uia", "Action": "dump" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "engines",
+      "route": "instances",
+      "waitMs": 10000,
+      "shots": [
+        {
+          "name": "17-engines",
+          "steps": [
+            { "Type": "uia", "Action": "clickcenter", "Ct": "ListItem", "Class": "NavigationViewItem", "ChildName": "引擎版本管理", "TimeoutMs": 6000 },
+            { "Type": "wait", "Ms": 3500 },
+            { "Type": "uia", "Action": "dump" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "settings",
+      "route": "instances",
+      "waitMs": 10000,
+      "shots": [
+        {
+          "name": "18-global-settings",
+          "steps": [
+            { "Type": "uia", "Action": "clickcenter", "Ct": "ListItem", "Class": "NavigationViewItem", "ChildName": "全局设置", "TimeoutMs": 6000 },
+            { "Type": "wait", "Ms": 3000 },
+            { "Type": "uia", "Action": "dump" }
+          ]
+        },
+        {
+          "name": "23-node-runtime",
+          "baseline": "18-global-settings",
+          "steps": [
+            { "Type": "move", "X": 780, "Y": 400 },
+            { "Type": "wheel", "Delta": -1200 },
+            { "Type": "wait", "Ms": 900 },
+            { "Type": "wheel", "Delta": -1200 },
+            { "Type": "wait", "Ms": 900 },
+            { "Type": "wheel", "Delta": -1200 },
+            { "Type": "wait", "Ms": 1200 },
+            { "Type": "uia", "Action": "dump" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "running",
+      "route": "instances",
+      "waitMs": 10000,
+      "shots": [
+        {
+          "name": "_before-launch",
+          "scratch": true,
+          "steps": [
+            { "Type": "wait", "Ms": 500 }
+          ]
+        },
+        {
+          "name": "_start-first",
+          "scratch": true,
+          "steps": [
+            { "Type": "uia", "Action": "clickcenter", "Ct": "Button", "Name": "启动", "Index": 0, "TimeoutMs": 5000 },
+            { "Type": "wait", "Ms": 6000 },
+            { "Type": "uia", "Action": "dump" }
+          ]
+        },
+        {
+          "name": "15-running-detail",
+          "baseline": "_before-launch",
+          "steps": [
+            { "Type": "uia", "Action": "clickcenter", "Ct": "Button", "Name": "查看实例详情", "Index": 0, "TimeoutMs": 5000 },
+            { "Type": "wait", "Ms": 3000 },
+            { "Type": "uia", "Action": "dump" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "crash",
+      "route": "instances",
+      "waitMs": 10000,
+      "shots": [
+        {
+          "name": "16-crashed-card",
+          "steps": [
+            { "Type": "uia", "Action": "clickcenter", "Ct": "Button", "Name": "启动", "Index": 2, "TimeoutMs": 5000 },
+            { "Type": "wait", "Ms": 7000 },
+            { "Type": "uia", "Action": "dump" }
+          ]
+        }
+      ]
+    }
+  ]
+}

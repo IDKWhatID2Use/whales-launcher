@@ -36,6 +36,21 @@ public sealed class AppState
     /// <summary>后端断开的原因，用于界面提示。</summary>
     public string? BackendDownReason { get; private set; }
 
+    /// <summary>
+    /// 首次装载是否已经**结束**（无论成功还是失败）。
+    ///
+    /// 为什么需要它：<see cref="AppServices.IsReady"/> 只表示"服务已装配"，
+    /// 而 <see cref="InitializeAsync"/> 是**在装配之后才异步跑的**（见 <c>App.xaml.cs</c>
+    /// 的 <c>BootBackendAsync</c>）。审计深链若在装配完成时就导航，目标页面会在
+    /// 实例列表尚未渲染完时被创建 —— 实测表现为：标题栏副标题已切到目标页面，
+    /// 内容区却仍停在"正在读取实例列表…"的加载态（空数据根下必现，因为此时桥接
+    /// 初始化更慢）。深链的等待条件因此必须用这个属性，而不是 IsReady。
+    /// </summary>
+    public bool IsInitialized { get; private set; }
+
+    /// <summary>首次装载结束时触发（含失败与后端断开两种收尾）。</summary>
+    public event EventHandler? Initialized;
+
     public event EventHandler? InstancesChanged;
 
     public event EventHandler? EnginesChanged;
@@ -50,10 +65,18 @@ public sealed class AppState
     /// </summary>
     public async Task InitializeAsync()
     {
-        await LoadVersionAsync();
-        await LoadConfigAsync();
-        await RefreshInstancesAsync();
-        await RefreshEnginesAsync();
+        try
+        {
+            await LoadVersionAsync();
+            await LoadConfigAsync();
+            await RefreshInstancesAsync();
+            await RefreshEnginesAsync();
+        }
+        finally
+        {
+            // 放在 finally：即使某一步抛错，等待者也不能被永久挂住。
+            MarkInitialized();
+        }
     }
 
     public async Task LoadVersionAsync()
@@ -128,6 +151,21 @@ public sealed class AppState
     {
         BackendDown = true;
         BackendDownReason = reason;
+
+        // 后端已经不可用，装载不可能再继续：立刻放行等待者，否则深链会空等到超时。
+        MarkInitialized();
+    }
+
+    /// <summary>幂等地标记"首次装载已结束"并通知等待者。</summary>
+    private void MarkInitialized()
+    {
+        if (IsInitialized)
+        {
+            return;
+        }
+
+        IsInitialized = true;
+        Initialized?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>就地替换集合内容，保持 ObservableCollection 实例不变（绑定不会断）。</summary>

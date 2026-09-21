@@ -1,0 +1,86 @@
+{
+  "schema": "whaleslauncher.tutorial.plan/1",
+  "description": "Probe plan 3: reach every page through the UI (rail items, card buttons, tabs) instead of the smoke route, which races the first page load.",
+  "exe": "F:\\WhalesLauncher\\desktop\\src\\WhalesLauncher.App\\bin\\Debug\\net10.0-windows10.0.26100.0\\win-x64\\WhalesLauncher.exe",
+  "home": "F:\\Temp\\whales-tutorial-home",
+  "outDir": "F:\\WhalesLauncher\\.probe\\tutorial-work\\probe",
+  "sessions": [
+    {
+      "id": "probe-nav-detail",
+      "route": "instances",
+      "waitMs": 9000,
+      "shots": [
+        {
+          "name": "probe-nav-detail-plugins",
+          "scratch": true,
+          "steps": [
+            { "Type": "uia", "Action": "invoke", "Ct": "Button", "Name": "查看实例详情", "Index": 0, "TimeoutMs": 4000 },
+            { "Type": "wait", "Ms": 2000 },
+            { "Type": "uia", "Action": "dump" }
+          ]
+        },
+        {
+          "name": "probe-nav-detail-settings",
+          "scratch": true,
+          "steps": [
+            { "Type": "uia", "Action": "select", "Ct": "ListItem", "Name": "设置", "TimeoutMs": 4000 },
+            { "Type": "wait", "Ms": 1500 },
+            { "Type": "uia", "Action": "dump" }
+          ]
+        },
+        {
+          "name": "probe-nav-detail-saves",
+          "scratch": true,
+          "steps": [
+            { "Type": "uia", "Action": "select", "Ct": "ListItem", "Name": "存档", "TimeoutMs": 4000 },
+            { "Type": "wait", "Ms": 1500 },
+            { "Type": "uia", "Action": "dump" }
+          ]
+        },
+        {
+          "name": "probe-nav-detail-logs",
+          "scratch": true,
+          "steps": [
+            { "Type": "uia", "Action": "select", "Ct": "ListItem", "Name": "日志", "TimeoutMs": 4000 },
+            { "Type": "wait", "Ms": 1500 },
+            { "Type": "uia", "Action": "dump" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "probe-nav-rail",
+      "route": "instances",
+      "waitMs": 9000,
+      "shots": [
+        {
+          "name": "probe-nav-rail-settings",
+          "scratch": true,
+          "steps": [
+            { "Type": "uia", "Action": "invoke", "Ct": "ListItem", "Class": "NavigationViewItem", "ChildName": "全局设置", "TimeoutMs": 5000 },
+            { "Type": "wait", "Ms": 2500 },
+            { "Type": "uia", "Action": "dump" }
+          ]
+        },
+        {
+          "name": "probe-nav-rail-engines",
+          "scratch": true,
+          "steps": [
+            { "Type": "uia", "Action": "invoke", "Ct": "ListItem", "Class": "NavigationViewItem", "ChildName": "引擎版本管理", "TimeoutMs": 5000 },
+            { "Type": "wait", "Ms": 2500 },
+            { "Type": "uia", "Action": "dump" }
+          ]
+        },
+        {
+          "name": "probe-nav-rail-create",
+          "scratch": true,
+          "steps": [
+            { "Type": "uia", "Action": "invoke", "Ct": "Button", "Name": "新建实例", "TimeoutMs": 5000 },
+            { "Type": "wait", "Ms": 3000 },
+            { "Type": "uia", "Action": "dump" }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,717 @@
+{
+  "schema": "whaleslauncher.ui-test-report/1",
+  "generatedAt": "2026-09-21T11:43:09.440Z",
+  "startedAt": "2026-09-21T11:39:59.606Z",
+  "durationMs": 189835,
+  "framework": {
+    "driver": "PowerShell 5.1 + 内置 UI Automation（UIAutomationClient / UIAutomationTypes）",
+    "capture": "scripts/audit/capture-core.ps1 的 [WinAuditCore]（PrintWindow PW_RENDERFULLCONTENT + ImageStats）",
+    "runner": "Node.js（scripts/test/run-ui-tests.mjs）",
+    "newDependencies": []
+  },
+  "environment": {
+    "exe": "F:\\WhalesLauncher\\desktop\\src\\WhalesLauncher.App\\bin\\Debug\\net10.0-windows10.0.26100.0\\win-x64\\WhalesLauncher.exe",
+    "bridge": "F:\\WhalesLauncher\\dist\\bridge\\server.cjs",
+    "node": "v26.3.0",
+    "platform": "win32 10.0.26200",
+    "tmpHome": "F:\\Temp\\whales-ui-test-vGV4tR"
+  },
+  "expectations": {
+    "instanceCount": 3,
+    "instanceNames": [
+      "UI Alpha",
+      "UI Beta",
+      "UI Gamma"
+    ],
+    "instanceDirs": [
+      "ui-alpha",
+      "ui-beta",
+      "ui-gamma"
+    ],
+    "engineCount": 2,
+    "engineVersions": [
+      "0.0.1-uitest.1",
+      "0.0.1-uitest"
+    ],
+    "noEngineHomeDir": "F:\\Temp\\whales-ui-test-IHAh33",
+    "emptyHomeDir": "F:\\Temp\\whales-ui-test-YVIN3n",
+    "firstInstanceName": "UI Alpha",
+    "firstInstanceDir": "ui-alpha",
+    "firstInstanceId": "ui-fixture-0001",
+    "sessionCount": 0,
+    "searchHitQuery": "UI Alpha",
+    "searchHitCount": 1,
+    "noMatchQuery": "zzz-no-such-instance-zzz",
+    "fixtureEngineVersion": "0.0.1-uitest"
+  },
+  "totals": {
+    "total": 67,
+    "passed": 66,
+    "failed": 0,
+    "unverifiable": 1,
+    "errored": 0
+  },
+  "pages": [
+    {
+      "page": "shell",
+      "title": "外壳（标题栏 / 左栏 / 应用菜单 / 日志抽屉 / 主题）",
+      "route": "instances",
+      "startedAt": "2026-09-21T11:40:00.1041438Z",
+      "durationMs": 10033,
+      "error": null,
+      "infrastructure": false,
+      "total": 9,
+      "passed": 9,
+      "failed": 0,
+      "unverifiable": 0,
+      "checks": [
+        {
+          "Id": "SH-01",
+          "Title": "左栏实例项数量与后端实例数一致",
+          "Kind": "existence",
+          "Status": "pass",
+          "Detail": "backend=3 rail=3 railTexts=15"
+        },
+        {
+          "Id": "SH-02",
+          "Title": "左栏固定入口（新建实例 / 引擎版本管理 / 全局设置）齐全",
+          "Kind": "existence",
+          "Status": "pass",
+          "Detail": "found 3/3 of the rail entry labels (navTexts=82)"
+        },
+        {
+          "Id": "SH-03",
+          "Title": "应用菜单可展开并列出菜单项",
+          "Kind": "behavior",
+          "Status": "pass",
+          "Detail": "menu items after expand: 10; probe '打开启动器目录' visible=True"
+        },
+        {
+          "Id": "SH-04",
+          "Title": "应用菜单可用 Escape 关闭",
+          "Kind": "behavior",
+          "Status": "pass",
+          "Detail": "probe '打开启动器目录' gone after Escape = True"
+        },
+        {
+          "Id": "SH-05",
+          "Title": "日志抽屉可打开",
+          "Kind": "behavior",
+          "Status": "pass",
+          "Detail": "toggle Off -> On; drawer controls visible before=False after=True; countText='显示 0 / 共 0 行'"
+        },
+        {
+          "Id": "SH-06",
+          "Title": "日志抽屉可再次关闭",
+          "Kind": "behavior",
+          "Status": "pass",
+          "Detail": "toggle -> Off; drawer controls gone=True"
+        },
+        {
+          "Id": "SH-07",
+          "Title": "主题按钮可点击且标签在深色/浅色间变化",
+          "Kind": "behavior",
+          "Status": "pass",
+          "Detail": "label '深色' -> '浅色'"
+        },
+        {
+          "Id": "SH-08",
+          "Title": "标题栏副标题反映当前路由",
+          "Kind": "existence",
+          "Status": "pass",
+          "Detail": "PART_SubtitleText='实例' expected='实例'"
+        },
+        {
+          "Id": "SH-09",
+          "Title": "左栏实例筛选框可读写",
+          "Kind": "behavior",
+          "Status": "pass",
+          "Detail": "wrote 'zz', readback='zz'"
+        }
+      ],
+      "diagnostics": [
+        "pid=45920 hwnd=4984598 class=WinUIDesktopWin32WindowClass route=instances"
+      ],
+      "exitCode": 0,
+      "timedOut": false,
+      "attempts": 1
+    },
+    {
+      "page": "p1-instances",
+      "title": "P1 实例列表",
+      "route": "instances",
+      "startedAt": "2026-09-21T11:40:10.1403514Z",
+      "durationMs": 20771,
+      "error": null,
+      "infrastructure": false,
+      "total": 10,
+      "passed": 10,
+      "failed": 0,
+      "unverifiable": 0,
+      "checks": [
+        {
+          "Id": "P1-01",
+          "Title": "卡片数量 == 后端实例数",
+          "Kind": "existence",
+          "Status": "pass",
+          "Detail": "backend=3 cards=3 gridFound=True"
+        },
+        {
+          "Id": "P1-02",
+          "Title": "每张卡都有状态文字（不仅靠颜色）",
+          "Kind": "existence",
+          "Status": "pass",
+          "Detail": "3/3 cards carry the status text '已停止'"
+        },
+        {
+          "Id": "P1-03",
+          "Title": "输入搜索词后卡片数量减少",
+          "Kind": "behavior",
+          "Status": "pass",
+          "Detail": "query='UI Alpha' readback='UI Alpha' cards 3 -> 1 (expected 1)"
+        },
+        {
+          "Id": "P1-04",
+          "Title": "输入不存在的词出现\"无匹配\"空态",
+          "Kind": "behavior",
+          "Status": "pass",
+          "Detail": "empty-filter anchor '清除筛选条件' present=True; rendered text='没有实例匹配「zzz-no-such-instance-zzz」。换个关键词，或切换状态筛选。 | 没有匹配的实例 | 筛选结果 | 排序方式 | 按状态筛选 | 搜索实例'"
+        },
+        {
+          "Id": "P1-05",
+          "Title": "\"无匹配\"空态与\"无实例\"空态文案不同",
+          "Kind": "behavior",
+          "Status": "pass",
+          "Detail": "no-match='没有实例匹配「zzz-no-such-instance-zzz」。换个关键词，或切换状态筛选。 | 没有匹配的实例 | 筛选结果 | 排序方式 | 按状态筛选 | 搜索实例' || no-instance='实例是一份独立的 dsh 运行环境，拥有自己的工作区、插件与设置。创建一个实例后即可在这里启动并管理它。 | 还没有实例 | 排序方式 | 按状态筛选 | 搜索实例 | 新建实例'"
+        },
+        {
+          "Id": "P1-06",
+          "Title": "卡片\"更多\"菜单可展开且含预期菜单项",
+          "Kind": "behavior",
+          "Status": "pass",
+          "Detail": "flyout opened=True, expected items found 7/7"
+        },
+        {
+          "Id": "P1-07",
+          "Title": "每张卡都有\"查看实例详情\"入口",
+          "Kind": "existence",
+          "Status": "pass",
+          "Detail": "3/3 cards have a '查看实例详情' button"
+        },
+        {
+          "Id": "P1-08",
+          "Title": "状态筛选 4 项存在且默认选中\"全部\"",
+          "Kind": "existence",
+          "Status": "pass",
+          "Detail": "items=4/4 all.IsSelected=True stopped.IsSelected=False"
+        },
+        {
+          "Id": "P1-09",
+          "Title": "排序下拉存在",
+          "Kind": "existence",
+          "Status": "pass",
+          "Detail": "SortBox ct=ControlType.ComboBox enabled=True"
+        },
+        {
+          "Id": "P1-10",
+          "Title": "点击刷新后卡片数量不变",
+          "Kind": "behavior",
+          "Status": "pass",
+          "Detail": "cards after refresh = 3 (backend 3)"
+        }
+      ],
+      "diagnostics": [
+        "pid=43768 hwnd=2952394 route=instances"
+      ],
+      "exitCode": 0,
+      "timedOut": false,
+      "attempts": 1
+    },
+    {
+      "page": "p2-detail-plugins",
+      "title": "P2 实例详情 · 插件",
+      "route": "detail/first/plugins",
+      "startedAt": "2026-09-21T11:40:30.9069381Z",
+      "durationMs": 10786,
+      "error": null,
+      "infrastructure": false,
+      "total": 8,
+      "passed": 8,
+      "failed": 0,
+      "unverifiable": 0,
+      "checks": [
+        {
+          "Id": "P2-01",
+          "Title": "深链进入时选中的是\"插件\"页签",
+          "Kind": "existence",
+          "Status": "pass",
+          "Detail": "tab '插件' IsSelected=True"
+        },
+        {
+          "Id": "P2-03",
+          "Title": "页签栏共 4 项且文案正确",
+          "Kind": "existence",
+          "Status": "pass",
+          "Detail": "tabs found=4 names='插件, 设置, 存档, 日志' missing=''"
+        },
+        {
+          "Id": "P2-02",
+          "Title": "三个分区（内置组合包/本地插件/依赖）入口齐全",
+          "Kind": "existence",
+          "Status": "pass",
+          "Detail": "内置组合包=True 本地插件=True 依赖=True"
+        },
+        {
+          "Id": "P2-04",
+          "Title": "切换到\"设置\"后内容真的变了",
+          "Kind": "behavior",
+          "Status": "pass",
+          "Detail": "pluginsMarker before=True after=False; settingsMarker before=False after=True; settings.IsSelected=True; texts 75 -> 82"
+        },
+        {
+          "Id": "P2-06",
+          "Title": "页头返回按钮存在",
+          "Kind": "existence",
+          "Status": "pass",
+          "Detail": "BackButton present=True"
+        },
+        {
+          "Id": "P2-07",
+          "Title": "页头副标题与当前页签一致",
+          "Kind": "existence",
+          "Status": "pass",
+          "Detail": "subtitle='实例详情 · 插件' expected='实例详情 · 插件'"
+        },
+        {
+          "Id": "P2-08",
+          "Title": "主操作按钮（启动/停止）存在",
+          "Kind": "existence",
+          "Status": "pass",
+          "Detail": "PrimaryActionButton present=True"
+        },
+        {
+          "Id": "P2-05",
+          "Title": "深链 detail/first/saves 进入时选中的是\"存档\"（历史缺陷回归）",
+          "Kind": "behavior",
+          "Status": "pass",
+          "Detail": "route='detail/first/saves' saves.IsSelected=True plugins.IsSelected=False"
+        }
+      ],
+      "diagnostics": [
+        "pid=40084 hwnd=3476348 route=detail/first/plugins"
+      ],
+      "exitCode": 0,
+      "timedOut": false,
+      "attempts": 1
+    },
+    {
+      "page": "p3-detail-settings",
+      "title": "P3 实例详情 · 设置",
+      "route": "detail/first/settings",
+      "startedAt": "2026-09-21T11:40:41.6891761Z",
+      "durationMs": 5925,
+      "error": null,
+      "infrastructure": false,
+      "total": 7,
+      "passed": 7,
+      "failed": 0,
+      "unverifiable": 0,
+      "checks": [
+        {
+          "Id": "P3-01",
+          "Title": "settings.yaml 编辑器存在",
+          "Kind": "existence",
+          "Status": "pass",
+          "Detail": "ct=ControlType.Edit valueLen=115 namedByProperty=True firstLine='# ui-test fixture settings\rmodel: ui-test-model\rtemperature: 0.2\rfeatures:\r  - alpha\r  - beta\rnested:\r  flag: true\r'"
+        },
+        {
+          "Id": "P3-02",
+          "Title": "编辑器行号列存在",
+          "Kind": "existence",
+          "Status": "pass",
+          "Detail": "gutter ct=ControlType.Edit value='1'"
+        },
+        {
+          "Id": "P3-03",
+          "Title": "隔离策略四个维度可读",
+          "Kind": "existence",
+          "Status": "pass",
+          "Detail": "readable groups=4/4 :: workspace: options=2 selectionItemPattern=2 longestText=63 names='独立（默认）/共享' ; saves: options=2 selectionItemPattern=2 longestText=63 names='独立（默认）/共享' ; settings: options=2 selectionItemPattern=2 longestText=63 names='独立（默认）/共享' ; credentials: options=2 selectionItemPattern=2 longestText=63 names='继承主 home（默认）/本实例独立'"
+        },
+        {
+          "Id": "P3-04",
+          "Title": "隔离策略每个维度的说明文字非空",
+          "Kind": "existence",
+          "Status": "pass",
+          "Detail": "groups with a substantive (>20 chars) explanation next to them = 4/4"
+        },
+        {
+          "Id": "P3-05",
+          "Title": "保存按钮存在（初始未修改状态可判定）",
+          "Kind": "existence",
+          "Status": "pass",
+          "Detail": "save.IsEnabled=True reload.IsEnabled=True (unmodified document -> save disabled is correct)"
+        },
+        {
+          "Id": "P3-06",
+          "Title": "选中页签为\"设置\"",
+          "Kind": "existence",
+          "Status": "pass",
+          "Detail": "tab '设置' IsSelected=True"
+        },
+        {
+          "Id": "P3-07",
+          "Title": "设置视图显示 settings.yaml 的路径标签",
+          "Kind": "existence",
+          "Status": "pass",
+          "Detail": "PathText='settings.yaml' isolationSectionVisible=True"
+        }
+      ],
+      "diagnostics": [
+        "pid=30088 hwnd=2100554 route=detail/first/settings"
+      ],
+      "exitCode": 0,
+      "timedOut": false,
+      "attempts": 1
+    },
+    {
+      "page": "p4-detail-saves",
+      "title": "P4 实例详情 · 存档",
+      "route": "detail/first/saves",
+      "startedAt": "2026-09-21T11:40:47.6059646Z",
+      "durationMs": 19676,
+      "error": null,
+      "infrastructure": false,
+      "total": 6,
+      "passed": 6,
+      "failed": 0,
+      "unverifiable": 0,
+      "checks": [
+        {
+          "Id": "P4-01",
+          "Title": "存档列表或明确空态二者必居其一",
+          "Kind": "existence",
+          "Status": "pass",
+          "Detail": "listPresent=False rows=0 emptyState='还没有存档'=True filteredEmpty=False"
+        },
+        {
+          "Id": "P4-02",
+          "Title": "空态/列表与后端会话数一致（fixture 无会话 → 空态）",
+          "Kind": "behavior",
+          "Status": "pass",
+          "Detail": "backend sessions=0 rows=0 emptyStateVisible=True"
+        },
+        {
+          "Id": "P4-03",
+          "Title": "空态标题文案非空且符合预期",
+          "Kind": "existence",
+          "Status": "pass",
+          "Detail": "empty state texts: '还没有存档 / 存档在实例运行后产生'"
+        },
+        {
+          "Id": "P4-04",
+          "Title": "选中页签为\"存档\"",
+          "Kind": "existence",
+          "Status": "pass",
+          "Detail": "tab '存档' IsSelected=True"
+        },
+        {
+          "Id": "P4-05",
+          "Title": "页头副标题含\"存档\"",
+          "Kind": "existence",
+          "Status": "pass",
+          "Detail": "subtitle='实例详情 · 存档'"
+        },
+        {
+          "Id": "P4-06",
+          "Title": "存档汇总文案可读",
+          "Kind": "existence",
+          "Status": "pass",
+          "Detail": "SummaryText='共 0 个存档，合计 0 B'"
+        }
+      ],
+      "diagnostics": [
+        "pid=46400 hwnd=14027252 route=detail/first/saves"
+      ],
+      "exitCode": 0,
+      "timedOut": false,
+      "attempts": 1
+    },
+    {
+      "page": "p5-detail-logs",
+      "title": "P5 实例详情 · 日志",
+      "route": "detail/first/logs",
+      "startedAt": "2026-09-21T11:41:07.2899850Z",
+      "durationMs": 15089,
+      "error": null,
+      "infrastructure": false,
+      "total": 6,
+      "passed": 6,
+      "failed": 0,
+      "unverifiable": 0,
+      "checks": [
+        {
+          "Id": "P5-01",
+          "Title": "日志面板存在",
+          "Kind": "existence",
+          "Status": "pass",
+          "Detail": "LogList present=True rows=1 emptyText('暂无日志')=True"
+        },
+        {
+          "Id": "P5-02",
+          "Title": "跟随滚动开关存在且可切换",
+          "Kind": "behavior",
+          "Status": "pass",
+          "Detail": "toggle On -> Off -> On"
+        },
+        {
+          "Id": "P5-03",
+          "Title": "行数计数文案可读",
+          "Kind": "existence",
+          "Status": "pass",
+          "Detail": "CountText='显示 0 / 共 0 行' TruncateText=''"
+        },
+        {
+          "Id": "P5-04",
+          "Title": "选中页签为\"日志\"",
+          "Kind": "existence",
+          "Status": "pass",
+          "Detail": "tab '日志' IsSelected=True"
+        },
+        {
+          "Id": "P5-05",
+          "Title": "日志区空态或日志行为非空（二者必居其一）",
+          "Kind": "existence",
+          "Status": "pass",
+          "Detail": "rows=1 emptyText=True (the fixture instance has never run, so the empty state is expected)"
+        },
+        {
+          "Id": "P5-06",
+          "Title": "关键字过滤与清空按钮存在",
+          "Kind": "existence",
+          "Status": "pass",
+          "Detail": "keyword=True clear=True copy=True"
+        }
+      ],
+      "diagnostics": [
+        "pid=49052 hwnd=4459348 route=detail/first/logs"
+      ],
+      "exitCode": 0,
+      "timedOut": false,
+      "attempts": 1
+    },
+    {
+      "page": "p6-engines",
+      "title": "P6 引擎版本管理",
+      "route": "engines",
+      "startedAt": "2026-09-21T11:41:22.3804854Z",
+      "durationMs": 30120,
+      "error": null,
+      "infrastructure": false,
+      "total": 7,
+      "passed": 6,
+      "failed": 0,
+      "unverifiable": 1,
+      "checks": [
+        {
+          "Id": "P6-01",
+          "Title": "已安装引擎行数 == 后端引擎数",
+          "Kind": "existence",
+          "Status": "pass",
+          "Detail": "backend engines=2 rows=2 versions='0.0.1-uitest.1, 0.0.1-uitest'"
+        },
+        {
+          "Id": "P6-02",
+          "Title": "默认选中\"已安装\"视图",
+          "Kind": "existence",
+          "Status": "pass",
+          "Detail": "tab '已安装' IsSelected=True"
+        },
+        {
+          "Id": "P6-05",
+          "Title": "Node 运行时状态可读",
+          "Kind": "existence",
+          "Status": "pass",
+          "Detail": "NodeBadge='' NodeCaption='当前生效的 Node：26.3.0（启动器自身进程）'"
+        },
+        {
+          "Id": "P6-06",
+          "Title": "刷新可用版本按钮存在",
+          "Kind": "existence",
+          "Status": "pass",
+          "Detail": "button '刷新可用版本' present=True"
+        },
+        {
+          "Id": "P6-07",
+          "Title": "每个引擎行显示后端返回的版本号",
+          "Kind": "existence",
+          "Status": "pass",
+          "Detail": "versions rendered: 2/2; missing=''"
+        },
+        {
+          "Id": "P6-03",
+          "Title": "切到\"可安装\"视图后内容真的变了",
+          "Kind": "behavior",
+          "Status": "pass",
+          "Detail": "contentChanged=True installedListHidden=True available.IsSelected=True"
+        },
+        {
+          "Id": "P6-04",
+          "Title": "\"未安装任何引擎\"与\"探测不到可用版本\"两种空态可区分",
+          "Kind": "unverifiable",
+          "Status": "unverifiable",
+          "Detail": "the \"available\" view is not in an empty state in this run (engine:available returned rows), so the installed-empty vs available-empty wording cannot be compared without depending on the npm registry"
+        }
+      ],
+      "diagnostics": [
+        "pid=40756 hwnd=10489314 route=engines"
+      ],
+      "exitCode": 0,
+      "timedOut": false,
+      "attempts": 1
+    },
+    {
+      "page": "p7-wizard",
+      "title": "P7 创建实例向导",
+      "route": "create",
+      "startedAt": "2026-09-21T11:41:52.5092438Z",
+      "durationMs": 13920,
+      "error": null,
+      "infrastructure": false,
+      "total": 7,
+      "passed": 7,
+      "failed": 0,
+      "unverifiable": 0,
+      "checks": [
+        {
+          "Id": "P7-01",
+          "Title": "4 步步骤条存在且文案正确",
+          "Kind": "existence",
+          "Status": "pass",
+          "Detail": "step bar texts: '1 名称与外观 / 2 引擎版本 / 3 profile 模板 / 4 隔离策略'"
+        },
+        {
+          "Id": "P7-05",
+          "Title": "未完成第 1 步时后续步骤不可点",
+          "Kind": "existence",
+          "Status": "pass",
+          "Detail": "disabled steps=3/3 :: Step2Item.enabled=False Step3Item.enabled=False Step4Item.enabled=False"
+        },
+        {
+          "Id": "P7-06",
+          "Title": "图标与强调色选择网格存在",
+          "Kind": "existence",
+          "Status": "pass",
+          "Detail": "IconGrid=True options=12 ColorGrid=True"
+        },
+        {
+          "Id": "P7-07",
+          "Title": "取消按钮存在",
+          "Kind": "existence",
+          "Status": "pass",
+          "Detail": "cancel=True back=True"
+        },
+        {
+          "Id": "P7-03",
+          "Title": "非法名（含 /）被拦截并给出错误文案",
+          "Kind": "behavior",
+          "Status": "pass",
+          "Detail": "name='bad/name' errorText='实例名不能包含 / 或 \\'"
+        },
+        {
+          "Id": "P7-04",
+          "Title": "输入合法名后错误消失、目录名预览出现",
+          "Kind": "behavior",
+          "Status": "pass",
+          "Detail": "name='UI Wizard Probe' errorCleared=True DirPreview='UI-Wizard-Probe'"
+        },
+        {
+          "Id": "P7-02",
+          "Title": "空名称时不会被创建（实例目录数不变）",
+          "Kind": "behavior",
+          "Status": "pass",
+          "Detail": "instance dirs 3 -> 3 (expected unchanged); process alive at check time=True"
+        }
+      ],
+      "diagnostics": [
+        "pid=40384 hwnd=10554850 launchRoute=instances",
+        "create wizard opened via the page-header button"
+      ],
+      "exitCode": 0,
+      "timedOut": false,
+      "attempts": 1
+    },
+    {
+      "page": "p8-settings",
+      "title": "P8 全局设置",
+      "route": "settings",
+      "startedAt": "2026-09-21T11:42:59.1727663Z",
+      "durationMs": 10647,
+      "error": null,
+      "infrastructure": false,
+      "total": 7,
+      "passed": 7,
+      "failed": 0,
+      "unverifiable": 0,
+      "checks": [
+        {
+          "Id": "P8-01",
+          "Title": "主题两项（深色/浅色）存在",
+          "Kind": "existence",
+          "Status": "pass",
+          "Detail": "ThemeRadios=True dark=True light=True"
+        },
+        {
+          "Id": "P8-04",
+          "Title": "主题单选项可切换且选中态跟随",
+          "Kind": "behavior",
+          "Status": "pass",
+          "Detail": "select light -> light.IsSelected=True; select dark -> dark.IsSelected=True"
+        },
+        {
+          "Id": "P8-03",
+          "Title": "界面上有\"不跟随系统\"的明确说明",
+          "Kind": "existence",
+          "Status": "pass",
+          "Detail": "text='当前版本的主题只能选「深色」或「浅色」，不跟随系统设置 —— 启动器配置里的 theme 字段只有这两个取值（契约缺口，已登记）。'"
+        },
+        {
+          "Id": "P8-02",
+          "Title": "Node 运行时候选列表存在",
+          "Kind": "existence",
+          "Status": "pass",
+          "Detail": "CandidateList=True rows=1 emptyText=False"
+        },
+        {
+          "Id": "P8-05",
+          "Title": "存储位置路径与 registry 输入框可读",
+          "Kind": "existence",
+          "Status": "pass",
+          "Detail": "PrimaryHomeBox='C:\\Users\\jcgfw\\.dsh' ; RootDirBox='F:\\Temp\\whales-ui-test-vGV4tR' ; RegistryBox='https://registry.npmjs.org'"
+        },
+        {
+          "Id": "P8-06",
+          "Title": "重新探测 Node 按钮存在",
+          "Kind": "existence",
+          "Status": "pass",
+          "Detail": "button '重新探测 Node' present=True"
+        },
+        {
+          "Id": "P8-07",
+          "Title": "版本号文案可读",
+          "Kind": "existence",
+          "Status": "pass",
+          "Detail": "NodeConclusion='使用 C:\\Program Files\\nodejs\\node.exe（Node v26.3.0，来源：启动器自身进程）' Version='启动器版本 1.0.0'"
+        }
+      ],
+      "diagnostics": [
+        "pid=8688 hwnd=7146886 launchRoute=instances",
+        "global settings opened via the navigation rail"
+      ],
+      "exitCode": 0,
+      "timedOut": false,
+      "attempts": 2
+    }
+  ],
+  "exitCode": 0
+}

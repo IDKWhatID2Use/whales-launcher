@@ -123,14 +123,25 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        var needsData = raw.StartsWith("detail/first", StringComparison.OrdinalIgnoreCase);
-        if (!needsData || AppServices.IsReady)
+        // 判断"数据是否已就绪"必须看 AppState.IsInitialized，而不是 AppServices.IsReady。
+        // IsReady 只说明服务已装配，而装载是在装配之后异步跑的；只看 IsReady 会在
+        // 实例列表还没渲染完时就导航，内容区停在加载态（空数据根下必现，实测）。
+        //
+        // 为什么**所有**深链都要等：不只是 detail/first 需要数据。实测 settings /
+        // engines / create 三个路由同样会在装载完成前被导航，表现是标题栏副标题已经
+        // 切到目标页面、内容区却仍是"正在读取实例列表…"。缺陷因此与路由无关，
+        // 而与"导航早于装载结束"有关。
+        var ready = AppServices.IsReady
+            && (AppServices.State.IsInitialized || AppServices.State.BackendDown);
+
+        if (ready)
         {
             NavigateSmokeRoute(raw);
             return;
         }
 
-        // 等后端装配完成（最多 30 秒），就绪后导航一次
+        // 等首次装载结束（最多 60 秒）。等待期间若后端断开，InitializeAsync 的收尾
+        // 或 MarkBackendDown 都会置位，因此不会永久空等。
         var tries = 0;
         var queue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
         if (queue is null)
@@ -144,12 +155,18 @@ public sealed partial class MainWindow : Window
         timer.Tick += (_, _) =>
         {
             tries += 1;
-            if (AppServices.IsReady)
+            if (!AppServices.IsReady)
+            {
+                timer.Stop();
+                return;
+            }
+
+            if (AppServices.State.IsInitialized || AppServices.State.BackendDown)
             {
                 timer.Stop();
                 NavigateSmokeRoute(raw);
             }
-            else if (tries > 100)
+            else if (tries > 200)
             {
                 timer.Stop();
             }
@@ -170,6 +187,13 @@ public sealed partial class MainWindow : Window
 
             switch (parts[0].ToLowerInvariant())
             {
+                // 显式列出首屏路由。此前没有这一条，靠 default 的空操作"恰好"不显形 ——
+                // 一旦首屏顺序变化，`WHALES_SMOKE_ROUTE=instances` 会静默变成空操作，
+                // 自动化脚本拿到的是"看起来对但没人保证"的首屏。
+                case "instances":
+                    _navigation.Navigate(RouteKeys.Instances);
+                    break;
+
                 case "detail" when parts.Length >= 2:
                     var id = parts[1];
                     if (string.Equals(id, "first", StringComparison.OrdinalIgnoreCase))

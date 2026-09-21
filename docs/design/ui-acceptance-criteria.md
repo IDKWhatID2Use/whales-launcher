@@ -1,5 +1,19 @@
 # WhalesLauncher 界面一致性验收标准（发布前门禁）
 
+> ## ⛔ 已废弃 —— 判据全部失效
+>
+> **本文档的验收判据全部针对已被删除的 Electron/DOM 前端**：取证基线是
+> `src/renderer/styles/*.css`（3 526 行）、`src/renderer/**/*.ts`、`src/main/**/*.ts`，
+> 这些文件已于 commit `ed93af9` 物理删除；判据本身（CSS 变量、`backdrop-filter`、
+> BrowserWindow 配置等）在 WinUI 3 下**没有对应物**，不可平移使用。
+>
+> - **当前视觉规范与自检清单**：[`winui3-visual-spec.md`](winui3-visual-spec.md)
+>   （§12 是给实现者的自检清单；§10 是证据索引）
+> - **当前审计方式**：真实窗口截图 + UIA 判据，见 [`../audit/README.md`](../audit/README.md)
+> - **当前交付说明**：[`../winui3-重构交付报告.md`](../winui3-重构交付报告.md)（§4 逐页审计结论）
+>
+> 本文档**保留在仓库中**是为了记录旧门禁的内容与被替换的原因。**不要按它验收新界面。**
+
 | 项目 | 内容 |
 | --- | --- |
 | 适用对象 | WhalesLauncher 1.0.0 起 · Electron 41.1.0 · Windows x64 · 原生 TS + CSS（无 UI 框架） |

@@ -1,0 +1,46 @@
+{
+  "schema": "whaleslauncher.tutorial.plan/1",
+  "description": "Probe plan 6: open the card more-menu with a real mouse click and with keyboard activation (UIA Invoke crashes the app with COMException 0x8000FFFF).",
+  "exe": "F:\\WhalesLauncher\\desktop\\src\\WhalesLauncher.App\\bin\\Debug\\net10.0-windows10.0.26100.0\\win-x64\\WhalesLauncher.exe",
+  "home": "F:\\Temp\\whales-tutorial-home",
+  "outDir": "F:\\WhalesLauncher\\.probe\\tutorial-work\\probe",
+  "sessions": [
+    {
+      "id": "probe-menu-click",
+      "route": "instances",
+      "waitMs": 9000,
+      "shots": [
+        {
+          "name": "probe-menu-clickcenter",
+          "scratch": true,
+          "mode": "screen",
+          "steps": [
+            { "Type": "uia", "Action": "info", "Ct": "Button", "Name": "更多操作", "Index": 0, "TimeoutMs": 4000 },
+            { "Type": "uia", "Action": "clickcenter", "Ct": "Button", "Name": "更多操作", "Index": 0, "TimeoutMs": 4000 },
+            { "Type": "wait", "Ms": 1500 },
+            { "Type": "uia", "Action": "dump" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "probe-menu-keyboard",
+      "route": "instances",
+      "waitMs": 9000,
+      "shots": [
+        {
+          "name": "probe-menu-space",
+          "scratch": true,
+          "mode": "screen",
+          "steps": [
+            { "Type": "uia", "Action": "focus", "Ct": "Button", "Name": "更多操作", "Index": 0, "TimeoutMs": 4000 },
+            { "Type": "wait", "Ms": 400 },
+            { "Type": "key", "Chord": "Space" },
+            { "Type": "wait", "Ms": 1500 },
+            { "Type": "uia", "Action": "dump" }
+          ]
+        }
+      ]
+    }
+  ]
+}

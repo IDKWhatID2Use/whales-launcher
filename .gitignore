@@ -32,8 +32,8 @@
 /shared/
 
 # -------------------------------------------------- 本机专属配置（含私有路径）
-# launcher.json 由 src/main/config.ts:loadConfig() 在首次启动时自动生成
-# （默认 primaryHome = os.homedir()/.dsh），本机那份含真实用户名与实例 ID。
+# launcher.json 是运行期配置（主 home、nodePath 等），本机那份含真实用户名
+# 与实例 ID。它在首次启动时按需生成；launcher.json.bak-* 是其轮转备份。
 /launcher.json
 /launcher.json.bak-*
 # .npmrc 含本机绝对缓存路径与 strict-ssl=false，入库无意义且有安全隐患。

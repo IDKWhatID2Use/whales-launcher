@@ -13,41 +13,38 @@
 '  comment, i.e. the comment swallowed part of the code. Do not add
 '  Chinese here, not even in a comment.
 '
+'  HISTORY (why the target changed):
+'    This file used to run "node scripts\launch.mjs"; the front end is
+'    now a native WinUI 3 application (desktop\src\WhalesLauncher.App)
+'    and launch.mjs was deleted. Calling it produced a message box
+'    saying "scripts\launch.mjs is missing" on every shortcut launch.
+'    The target is now scripts\launch-app.ps1.
+'
 '  Failure reporting matters more here than anywhere else: the console
 '  that would have shown the error is hidden, so a broken start would
 '  otherwise fail *silently*. Signals used:
-'    1. exit code of "node scripts\launch.mjs" - launch.mjs only returns
-'       after Electron exits, so non-zero means "never came up"/"crashed";
-'    2. everything the attempt printed lands in
-'       logs\launcher-shortcut.log (launch.mjs is its ONLY writer, and it
-'       rotates the previous run into logs\history\). The redirect below
-'       goes to a SEPARATE file on purpose - see the note at the call.
+'    1. scripts\launch-app.ps1 is run with -Wait, so it stays alive for
+'       as long as the app does. While the app is up this script exits 0
+'       and the console tears down by itself - nothing is killed.
+'    2. If the app is gone within 10 seconds, that is a start failure:
+'       the launcher is terminated and its output - which explains why -
+'       is shown in a message box. Everything the attempt printed also
+'       lands in logs\launcher-console-<timestamp>.log.
 ' ===================================================================
 Option Explicit
 
-Dim shell, fso, scriptDir, launcher, logFile, consoleFile, cmd, code, shellNote
+Dim shell, fso, scriptDir, launcher, consoleFile, cmd, code, shellNote, waited, running
 
 Set shell = CreateObject("WScript.Shell")
 Set fso = CreateObject("Scripting.FileSystemObject")
 
 scriptDir = fso.GetParentFolderName(WScript.ScriptFullName)
-launcher = scriptDir & "\scripts\launch.mjs"
+launcher = scriptDir & "\scripts\launch-app.ps1"
 
 If Not fso.FileExists(launcher) Then
-  MsgBox "WhalesLauncher: scripts\launch.mjs is missing." & vbCrLf & _
+  MsgBox "WhalesLauncher: scripts\launch-app.ps1 is missing." & vbCrLf & _
          "Expected here: " & launcher & vbCrLf & vbCrLf & _
          "The project folder looks incomplete or was moved.", _
-         16, "WhalesLauncher"
-  WScript.Quit 1
-End If
-
-' Check Node.js up front: otherwise the hidden cmd swallows the error and
-' the user just sees "nothing happened".
-If FindOnPath("node.exe") = "" Then
-  MsgBox "WhalesLauncher needs Node.js 22 or newer, but no node.exe was found on PATH." & vbCrLf & vbCrLf & _
-         "Install it from https://nodejs.org/ and sign out / back in so PATH" & vbCrLf & _
-         "takes effect. For the full explanation, run the .bat launcher in" & vbCrLf & _
-         "the project root instead.", _
          16, "WhalesLauncher"
   WScript.Quit 1
 End If
@@ -58,51 +55,88 @@ If Not fso.FolderExists(scriptDir & "\logs") Then
   On Error GoTo 0
 End If
 
-logFile = scriptDir & "\logs\launcher-shortcut.log"
 consoleFile = scriptDir & "\logs\launcher-console-" & TimeStamp() & ".log"
 shell.CurrentDirectory = scriptDir
 
-' The redirect target MUST be a different file from --log.
-'
-' Why (found by measurement): the first version redirected into the same
-' path, "... --log=<logFile> > <logFile> 2>&1". cmd empties and holds
-' <logFile> BEFORE node starts, so launch.mjs's rotation saw a file that
-' had just been truncated, archived that empty file into history on every
-' single start, and then Electron overwrote the real failure output. The
-' rotation looked alive but preserved nothing.
-' Now launch.mjs is the only writer of launcher-shortcut.log, and this
-' redirect only catches errors raised earlier - e.g. node.exe missing from
-' PATH at execution time.
-'
-' A timestamped name keeps consecutive failures side by side instead of
-' each one overwriting the last; anything older than a week is swept away
-' first (these files are empty in the normal case, so the sweep is cheap).
+' These files are empty in the normal case, so the sweep is cheap; a
+' timestamped name keeps consecutive failures side by side instead of
+' each one overwriting the last.
 SweepOldConsoleLogs scriptDir & "\logs", 7
 
-cmd = "cmd /c node """ & launcher & """ --quiet --log=""" & logFile & """ > """ & consoleFile & """ 2>&1"
-code = shell.Run(cmd, 0, True)
+' No "pause" here on purpose: this console has no stdin, so "pause" would
+' block forever after a failure and leave a hidden powershell.exe behind.
+' launch-app.ps1 -Wait keeps the console alive for exactly as long as the
+' app lives, which is the liveness signal polled below.
+' Window style 0 hides the console; window style 7 would minimise it.
+cmd = "cmd /c powershell.exe -NoProfile -ExecutionPolicy Bypass -File """ & launcher & """ -Wait > """ & consoleFile & """ 2>&1"
 
-If code = 0 Then
+On Error Resume Next
+code = shell.Run(cmd, 0, False)
+If Err.Number <> 0 Then
+  MsgBox "WhalesLauncher could not start its launcher process." & vbCrLf & vbCrLf & _
+         "Error: " & Err.Description, 16, "WhalesLauncher"
+  WScript.Quit 1
+End If
+On Error GoTo 0
+
+' Wait for the app to come up: the launcher prints the exe path, builds
+' nothing, and returns immediately after Start-Process, so 10 seconds is
+' generous even on a cold start. A healthy app simply keeps running, and
+' in that case this script exits while the app stays up.
+running = False
+For waited = 1 To 20
+  WScript.Sleep 500
+  If IsAppRunning() Then
+    running = True
+    Exit For
+  End If
+Next
+
+If running Then
   WScript.Quit 0
 End If
 
-' On failure, show shell-level output first (it explains the cases where
-' node never ran), otherwise point at the log file that launch.mjs wrote.
+' ---------------------------------------------------------------- failure
+' Kill the launcher first, otherwise the hidden console lingers.
+On Error Resume Next
+shell.Run "taskkill /f /im powershell.exe /fi ""WINDOWTITLE eq*"" ", 0, True
+On Error GoTo 0
+
 shellNote = ""
 On Error Resume Next
 If fso.FileExists(consoleFile) Then
   If fso.GetFile(consoleFile).Size > 0 Then
-    shellNote = vbCrLf & vbCrLf & "Shell-level output:" & vbCrLf & ReadHead(consoleFile, 800)
+    shellNote = vbCrLf & vbCrLf & "Output:" & vbCrLf & ReadHead(consoleFile, 800)
   End If
 End If
 On Error GoTo 0
 
-MsgBox "WhalesLauncher failed to start (exit code " & code & ")." & vbCrLf & vbCrLf & _
-       "Read this first: " & scriptDir & "\logs\launcher-summary.log" & _
-       vbCrLf & "Full log: " & logFile & shellNote & vbCrLf & vbCrLf & _
-       "For the full walkthrough, run the .bat launcher in the project root.", _
+MsgBox "WhalesLauncher did not start." & vbCrLf & vbCrLf & _
+       "Most common reason: the app has not been built yet." & vbCrLf & _
+       "Build it once with:  npm run build" & vbCrLf & _
+       "or run the .bat launcher in the project root and pass --build." & _
+       shellNote & vbCrLf & vbCrLf & _
+       "Log: " & consoleFile, _
        16, "WhalesLauncher"
-WScript.Quit code
+WScript.Quit 1
+
+' ------------------------------------------------------------------
+' True when a WhalesLauncher.exe process exists.
+' ------------------------------------------------------------------
+Function IsAppRunning()
+  Dim wmi, procs, p
+  IsAppRunning = False
+  On Error Resume Next
+  Set wmi = GetObject("winmgmts:\\.\root\cimv2")
+  If Err.Number <> 0 Then Exit Function
+  Set procs = wmi.ExecQuery("SELECT Name FROM Win32_Process WHERE Name = 'WhalesLauncher.exe'")
+  If Err.Number <> 0 Then Exit Function
+  For Each p In procs
+    IsAppRunning = True
+    Exit For
+  Next
+  On Error GoTo 0
+End Function
 
 ' ------------------------------------------------------------------
 ' Read the first maxChars characters of a text file (for the message box).
@@ -162,35 +196,3 @@ Sub SweepOldConsoleLogs(dirPath, maxAgeDays)
   Next
   On Error GoTo 0
 End Sub
-
-' ------------------------------------------------------------------
-' Look up an executable on PATH without starting it. App Paths wins,
-' then every directory listed in %PATH%.
-' ------------------------------------------------------------------
-Function FindOnPath(exeName)
-  Dim appPath, pathVar, parts, i, candidate
-  FindOnPath = ""
-
-  On Error Resume Next
-  appPath = shell.RegRead("HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\" & exeName & "\")
-  On Error GoTo 0
-  If VarType(appPath) = vbString Then
-    If appPath <> "" And fso.FileExists(appPath) Then
-      FindOnPath = appPath
-      Exit Function
-    End If
-  End If
-
-  pathVar = shell.ExpandEnvironmentStrings("%PATH%")
-  parts = Split(pathVar, ";")
-  For i = 0 To UBound(parts)
-    candidate = Trim(parts(i))
-    If candidate <> "" Then
-      If Right(candidate, 1) <> "\" Then candidate = candidate & "\"
-      If fso.FileExists(candidate & exeName) Then
-        FindOnPath = candidate & exeName
-        Exit Function
-      End If
-    End If
-  Next
-End Function

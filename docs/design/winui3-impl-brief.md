@@ -9,8 +9,12 @@
 WhalesLauncher 原为 Electron + TypeScript 桌面启动器（管理 dsh 实例与版本）。
 本轮决策：**前端整体替换为 WinUI 3（C#/XAML），Electron 主进程与 DOM/CSS 渲染层全部废弃**。
 - `src/core/**`（约 7 000 行纯 Node/TS 业务逻辑）保留，由 Node 侧车进程承载。
-- 旧前端（`src/renderer/**`、`src/main/**`、`src/preload/**`）**不得参考其 UI 设计**；仅 `src/shared/contracts.ts`（契约）与 `src/main/ipc.ts`（参数形状）可作为**事实来源**查阅。
-- 工作目录 `F:\WhalesLauncher`，分支 `winui3-rewrite`。
+- 旧前端（`src/renderer/**`、`src/main/**`、`src/preload/**`）**不得参考其 UI 设计**，且它们**已于 commit `ed93af9` 物理删除**——本文件中凡提到这些路径的地方都是历史说明，不要照着去找文件。
+- `src/shared/contracts.ts`（契约）仍是**唯一事实源**；原先 `src/main/ipc.ts` 里的参数校验已**原样搬运**到 `desktop/bridge/validate.mjs`，那份才是当前的校验事实源。
+- 工作目录 `F:\WhalesLauncher`，工作分支 `winui3-rewrite`（收尾后快进到 `main`）。
+
+> **历史文档取回方式**：任何已删除文件的最后版本都可用
+> `git show ed93af9^:<路径>` 取回（`ed93af9^` 即拆除前快照 `8690343`）。
 
 ## 2. 必读（按顺序）
 
@@ -65,31 +69,34 @@ if (!result.Ok) { /* 必须把 result.Error 呈现到界面（InfoBar），不�
 ## 5. 构建与自检
 
 ```powershell
-# 构建（dotnet 不在 PATH，用全路径）
-$env:DOTNET_NOLOGO=1
-& 'C:\Program Files\dotnet\dotnet.exe' build 'F:\WhalesLauncher\desktop\src\WhalesLauncher.App\WhalesLauncher.App.csproj' -c Debug
+# 构建：一律走这个入口（自带命名 Mutex 串行化 + obj 锁自动重试）
+& powershell -NoProfile -ExecutionPolicy Bypass -File 'F:\WhalesLauncher\desktop\build-app.ps1'
 
 # 截图自检（真实窗口截图，已验证可用）
-& powershell -NoProfile -ExecutionPolicy Bypass -File 'F:\WhalesLauncher\.probe\capture-smoke.ps1' `
+& powershell -NoProfile -ExecutionPolicy Bypass -File 'F:\WhalesLauncher\scripts\audit\capture-window.ps1' `
     -Exe 'F:\WhalesLauncher\desktop\src\WhalesLauncher.App\bin\Debug\net10.0-windows10.0.26100.0\win-x64\WhalesLauncher.exe' `
-    -Out 'F:\WhalesLauncher\.probe\shots\<你的页面>.png' -WaitMs 8000
+    -OutPath 'F:\WhalesLauncher\.probe\shots\<你的页面>.png' -WaitMs 8000
 ```
 
 **并发注意**：
 - 多个实现者会同时构建同一工程 → 偶发 `obj` 文件锁冲突或看到他人半成品。**重试一次**；持续失败就在回复里报告，不要反复硬刚。
+- **`build-app.ps1` 绝不要加 `-Rebuild`**：`-t:Rebuild` 与并发构建交互会报 `CS2001 ... GeneratedMSBuildEditorConfig.editorconfig`，本工程已实测失败。该脚本的 `-Rebuild` 开关属于历史遗留，不要用。
 - 截图时会同时有多个应用窗口，脚本按 PID 定位窗口，互不干扰；但**不要**在截图脚本运行期间手动关闭别人的窗口。
-- **`Get-Content` 会把 UTF-8 中文显示成乱码** —— 读文件一律用 read 工具。写 `.ps1` 时用纯 ASCII（PS 5.1 按 ANSI 读脚本，中文会导致语法错误）。
+- **`Get-Content` 会把 UTF-8 中文显示成乱码** —— 但那是 **PowerShell 控制台输出代码页（GBK/936）的解码假象，文件本身通常是好的**（本项目已实测：全仓真实 mojibake 为 0）。要正确查看中文，先执行：
+  ```powershell
+  $OutputEncoding=[System.Text.Encoding]::UTF8; [Console]::OutputEncoding=[System.Text.Encoding]::UTF8
+  ```
+  或直接 `[System.Text.Encoding]::UTF8.GetString([System.IO.File]::ReadAllBytes($path))`。
+  ⚠ **看到乱码时不要急着"修"** —— 照乱码改反而会制造真损坏（见下面第 4 条）。写 `.ps1` 时用纯 ASCII（PS 5.1 按 ANSI 读脚本，中文会导致语法错误）。
 
 ## 5.5 三条实测环境事实（core-dev 实测，务必知道）
 
-1. **构建必须带 `DOTNET_CLI_UI_LANGUAGE='en-US'`**（见 §5 命令）。zh-CN 下 XAML 编译器会把真实错误吞成误导性的 `WMC9999 未能找到任何适合于指定的区域性或非特定区域性的资源` —— 你会朝错误方向修。带上它才会看到 `WMC0909` / `WMC1111` / `CSxxxx` 这类真实错误。
-   ⚠ **不要同时设 `VSLANG`**。Lead 实测三种组合，只有"只设 `DOTNET_CLI_UI_LANGUAGE`、不设 `VSLANG`"能显示真实错误；一旦设了 `VSLANG=1033`，XAML 编译器的错误消息资源会加载失败，反而退化回 `WMC9999`：
-   ```powershell
-   $env:DOTNET_NOLOGO=1
-   $env:DOTNET_CLI_UI_LANGUAGE='en-US'
-   Remove-Item Env:VSLANG -ErrorAction SilentlyContinue   # 关键：清掉它
-   ```
-   另一个常见"假错误"：多人并发构建同一工程会命中 `CS2012 ... being used by another process`（obj 文件锁）—— **那是锁冲突、不是代码错误**，等 20~30 秒重试即可，不要据此改代码。
+1. **不要设任何诊断语言环境变量**（本节结论已被后续实测推翻，请以新结论为准）。
+   - 曾建议设 `DOTNET_CLI_UI_LANGUAGE='en-US'`；实测该变量**不可靠**：net472 的 XamlCompiler 是子进程，会忽略它。
+   - 而 `VSLANG=1033` 会让 XAML 编译器的错误消息资源加载失败，**反而**退化回误导性的 `WMC9999 未能找到任何适合于指定的区域性或非特定区域性的资源`。
+   - **现行做法**：把 `DOTNET_CLI_UI_LANGUAGE` 与 `VSLANG` **都清掉**（`desktop/build-app.ps1` 已自动这么做），这样才能看到真实错误。
+   - 最常见的"假错误"仍然是 `CS2012 ... being used by another process`（obj 文件锁）—— 那是锁冲突、不是代码错误，重试即可。
+   - **并发构建一律走 `desktop/build-app.ps1`**：它用命名 Mutex `Global\WhalesLauncherWinUI3Build` 串行化，并自动重试锁竞争。手工并发 `dotnet build` 正是当初大量 `WMC9999` 的根因。
 2. **`host:` 宿主方法由外壳统一注册一次**，页面**绝不**各自注册（8 处注册会互相覆盖）。
    外壳注册全部 8 条：`host:pickArchive`、`host:pickFolder`、`host:pickPackFile`、`host:saveFile`、`host:downloadsDir`、`host:openPath`、`host:openExternal`、`host:messageBox`。
    页面要"选文件 / 选目录 / 打开外部链接"，请调用**对应业务通道**（如 `plugin:pickArchive`、`plugin:pickFolder`、`pack:pickFile`、`saves:openFolder`），Node 侧会反向调用宿主编 —— **页面不要直接碰 `host:`**。
@@ -111,14 +118,22 @@ $env:DOTNET_NOLOGO=1
 ## 5.6 XAML 增量编译缓存会报「幽灵错误」（务必知道）
 
 **症状**：文件明明已经改好，`dotnet build`（增量）却一直复读**旧行号的旧错误**。
-Lead 实测：`EnginesPage.xaml` 的 `ProgressBar.Orientation` 早已被改成 `ProgressRing`，增量构建仍持续报 `(683,25) Unknown member 'Orientation' on element 'ProgressBar'`；只有强制重建才反映真实状态。
+Lead 实测：`EnginesPage.xaml` 的 `ProgressBar.Orientation` 早已被改成 `ProgressRing`，增量构建仍持续报 `(683,25) Unknown member 'Orientation' on element 'ProgressBar'`。
+
+**真正根因（已查明）**：不是"缓存脏了"，而是**并发构建**。另一个构建正在删除/重写 `obj\...\output.json` 并截断生成的 `*.g.cs`，于是编译器反序列化失败，报出一个与真实原因无关的错误。
 
 ```powershell
-# 强制重建，清掉 XAML 增量缓存
-& 'C:\Program Files\dotnet\dotnet.exe' build '<csproj 全路径>' -c Debug -t:Rebuild
+# 正确做法：走串行化入口，它会拿命名 Mutex 并把并发构建排成队
+& powershell -NoProfile -ExecutionPolicy Bypass -File 'F:\WhalesLauncher\desktop\build-app.ps1'
 ```
 
-**判断法则**：若错误指向的行号与实际文件内容**对不上**，先 `-t:Rebuild` 再下结论 —— 不要在幽灵错误上耗时间，也不要据此去"修"一处本来就正确的代码。
+> ⚠ **不要用 `-t:Rebuild`**。它在本工程会失败并报
+> `CS2001 ... GeneratedMSBuildEditorConfig.editorconfig`——那是 `-t:Rebuild` 与并发构建交互的产物，
+> **不是**代码问题。`desktop/build-app.ps1` 虽然有 `-Rebuild` 开关，但那是历史遗留，收尾阶段已不再使用。
+
+**判断法则**：若错误指向的行号与实际文件内容**对不上**，先确认"此刻是否还有别的构建在跑"。等对方结束（或让所有人都走 `build-app.ps1`）再重跑一次即可 —— 不要在幽灵错误上耗时间，也不要据此去"修"一处本来就正确的代码。
+
+**兜底**（仅在确认无并发、且错误确实顽固时）：停掉所有构建，删除 `desktop\src\WhalesLauncher.App\obj\` 与 `bin\`，再跑一次 `build-app.ps1`。这一步代价高，不要作为首选。
 
 ---
 

@@ -1,0 +1,52 @@
+{
+  "schema": "whaleslauncher.tutorial.plan/1",
+  "description": "Probe plan: launch the app on the isolated demo home and dump window/UIA facts. Used to learn control names before writing the real shot plans.",
+  "exe": "F:\\WhalesLauncher\\desktop\\src\\WhalesLauncher.App\\bin\\Debug\\net10.0-windows10.0.26100.0\\win-x64\\WhalesLauncher.exe",
+  "home": "F:\\Temp\\whales-tutorial-home",
+  "outDir": "F:\\WhalesLauncher\\.probe\\tutorial-work\\probe",
+  "sessions": [
+    {
+      "id": "probe-instances",
+      "route": "instances",
+      "waitMs": 8000,
+      "shots": [
+        {
+          "name": "probe-baseline",
+          "scratch": true,
+          "steps": [
+            { "Type": "uia", "Action": "dump" },
+            { "Type": "uia", "Action": "info", "Name": "新建实例" },
+            { "Type": "uia", "Action": "info", "Ct": "SelectorBar" },
+            { "Type": "uia", "Action": "info", "Name": "需处理" }
+          ]
+        },
+        {
+          "name": "probe-after-filter",
+          "scratch": true,
+          "steps": [
+            { "Type": "uia", "Action": "select", "Name": "需处理", "TimeoutMs": 4000 }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "probe-menu",
+      "route": "instances",
+      "waitMs": 8000,
+      "shots": [
+        {
+          "name": "probe-menu-open",
+          "scratch": true,
+          "mode": "screen",
+          "steps": [
+            { "Type": "uia", "Action": "windows" },
+            { "Type": "uia", "Action": "expand", "Name": "文件", "Scope": "main", "TimeoutMs": 4000 },
+            { "Type": "wait", "Ms": 900 },
+            { "Type": "uia", "Action": "dump" },
+            { "Type": "uia", "Action": "windows" }
+          ]
+        }
+      ]
+    }
+  ]
+}

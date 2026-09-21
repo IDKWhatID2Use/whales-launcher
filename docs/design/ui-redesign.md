@@ -1,5 +1,18 @@
 # WhalesLauncher 视觉语言与 GUI 重设计方案（Windows 11 Fluent 版）
 
+> ## ⛔ 已废弃 —— 请勿作为设计依据
+>
+> **本文档描述的是已被整体替换的 Electron + DOM/CSS 前端**（`src/renderer/**`、`src/preload/**`、
+> `src/main/**` 于 commit `ed93af9` 物理删除）。其中的视觉规范、令牌体系、标题栏/菜单方案
+> **全部不适用于当前实现**。
+>
+> - **当前视觉规范**：[`winui3-visual-spec.md`](winui3-visual-spec.md)（基于 microsoft-ui-xaml，每条规格带出处）
+> - **当前交付说明**：[`../winui3-重构交付报告.md`](../winui3-重构交付报告.md)
+> - **废弃判定来源**：`winui3-visual-spec.md` §0 明确把本文档列入「不得作为设计依据的已废弃材料」
+>
+> 本文档**保留在仓库中**是为了记录设计演进与被替换的原因，并让旧版本可回溯
+> （旧前端源码用 `git show ed93af9^:<路径>` 取回）。**不要按它写新代码。**
+
 | 项目 | 内容 |
 | --- | --- |
 | 文档版本 | **v2**（WCO + Mica 版） |

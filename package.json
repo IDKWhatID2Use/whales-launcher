@@ -14,6 +14,7 @@
     "test": "node --test --test-isolation=none \"tests/**/*.test.mjs\"",
     "test:core": "node --test --test-isolation=none \"tests/core/*.test.mjs\"",
     "smoke:bridge": "node scripts/audit/bridge-smoke.mjs",
+    "test:ui": "node scripts/test/run-ui-tests.mjs",
     "audit:visual": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/audit/audit-visual.ps1",
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\""
   },

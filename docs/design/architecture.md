@@ -1,7 +1,14 @@
 # WhalesLauncher 总体设计方案
 
-> 版本：v1（Lead 冻结）｜技术栈：Electron 41 + TypeScript + esbuild｜目标平台：Windows x64
+> 版本：v1（Lead 冻结）｜**技术栈（已更新）**：WinUI 3 (C#/XAML) + Windows App SDK + .NET 10 前端，
+> Node.js 侧车承载 `src/core` 业务引擎｜目标平台：Windows x64
 > 依据：`docs/research/dsh-interface.md`（dsh 实测）、`docs/research/pcl2-research.md`（PCL2 调研）
+>
+> ⚠ **本文档诞生于 Electron 前端时代**。§3 分层架构已按 WinUI 3 重构更新；其余章节中
+> 凡提到「Electron / renderer / preload / main / esbuild 打包前端 / `npm run launch`」的地方
+> 属历史记录，**不再反映当前实现**。当前实现请看
+> [WinUI 3 交付报告](../winui3-重构交付报告.md) 与 [视觉规范](winui3-visual-spec.md)。
+> 旧前端源码可用 `git show ed93af9^:<路径>` 取回。
 
 ---
 
@@ -62,41 +69,51 @@ WhalesLauncher/
 
 ## 3. 分层架构
 
+> ⚠ **本节已按 WinUI 3 重构更新（2026-09）**。旧图把 `renderer/` `preload/` `main/` 三层画成
+> Electron 结构，那三层已在 commit `ed93af9` **物理删除**；下面是替换后的真实分层。
+> 第 4 节以下（数据模型、核心流程）仍然有效，因为 `core/` 与契约都没有变。
+
 ```
-┌─────────────────────────────────────────────────┐
-│ renderer/   UI（原生 TS 组件 + CSS，无框架）      │
-│  实例列表 · 实例详情 · 版本管理 · 创建向导 · 设置  │
-└────────────────────┬────────────────────────────┘
-                     │ contextBridge（类型化 IPC）
-┌────────────────────┴────────────────────────────┐
-│ preload/    白名单 API 暴露（最小权限）           │
-└────────────────────┬────────────────────────────┘
-┌────────────────────┴────────────────────────────┐
-│ main/       Electron 主进程                      │
-│  窗口/菜单/托盘 · IPC 路由 · 日志流推送           │
-└────────────────────┬────────────────────────────┘
-┌────────────────────┴────────────────────────────┐
-│ core/       纯 Node/TS 引擎（无 Electron 依赖）   │
-│  paths · instance · engine · profile · plugins   │
-│  launch · saves · modpack · fsx                  │
-└────────────────────┬────────────────────────────┘
-                     │ 仅两条稳定边界
-        ┌────────────┴────────────┐
-        │  dsh CLI（子进程）        │
-        │  文件系统（dsh 约定）      │
-        └─────────────────────────┘
+┌─────────────────────────────────────────────────────┐
+│ desktop/src/WhalesLauncher.App/                     │
+│   Views/    8 个页面（实例列表 · 详情4标签 · 引擎 ·   │
+│             创建向导 · 全局设置）                    │
+│   Shell/    外壳（标题栏 · 左实例栏 · 日志抽屉 · 菜单）│
+│   Controls/ PageHeader · ToastHost                  │
+│   Services/ CoreBridge · AppState · 导航 · 格式化     │
+│   Models/   契约镜像（机械对应 contracts.ts）         │
+│   技术：WinUI 3 (C#/XAML) + Windows App SDK + .NET 10 │
+└──────────────────────┬──────────────────────────────┘
+                       │ NDJSON over stdio（JSON-RPC v1）
+                       │ id 命名空间 c*/n*，双向 RPC
+┌──────────────────────┴──────────────────────────────┐
+│ desktop/bridge/   Node 侧车进程                      │
+│  server.mjs（入口） validate.mjs（参数校验）          │
+│  host.mjs（反向请求 C# 宿主方法）                     │
+│  events.mjs（log:chunk / log:state 推送）            │
+└──────────────────────┬──────────────────────────────┘
+┌──────────────────────┴──────────────────────────────┐
+│ src/core/   纯 Node/TS 引擎（无任何 UI 依赖）         │
+│  paths · instance · engine · profile · plugins      │
+│  launch · saves · modpack · fsx · node-runtime      │
+└──────────────────────┬──────────────────────────────┘
+                       │ 仅两条稳定边界
+        ┌──────────────┴──────────────┐
+        │  dsh CLI（子进程）            │
+        │  文件系统（dsh 约定）          │
+        └─────────────────────────────┘
 ```
 
 **关键架构决策**
 
 | 决策 | 理由 |
 |---|---|
-| core 不依赖 Electron | 可脱离 GUI 单测；未来可复用为 CLI |
+| core 不依赖任何 UI 框架 | 可脱离 GUI 单测；可复用为 CLI；本次前端整体替换时 core **一行未改**即是证明 |
 | **不 import dsh 内部 API**，只走 CLI + 文件系统 | 多版本共存下内部 API 会漂移（见 dsh 勘察 D3） |
-| **dsh 必须由独立的 Node.js 执行**（不用 Electron 内置运行时） | dsh 的原生模块 `node-addon-require-builtin` 按**运行时指纹白名单**匹配，Electron 41 实测被拒（`Unsupported/no-context`）→ 实例启动必然失败。core 的 `node-runtime.ts` 负责探测 + 探针校验 + 缓存，失败时给出中文诊断 |
-| renderer 用原生 TS + CSS，不引入 UI 框架 | 依赖最少、启动最快、CSS 完全可控以达成"界面美观" |
-| esbuild 单步打包 main/preload/renderer | 构建脚本极简、可重复、无插件链风险 |
-| IPC 走类型化契约 | 主/渲染两侧共享 `src/shared/contracts.ts`，编译期保证一致 |
+| **dsh 必须由独立的 Node.js 执行** | dsh 的原生模块 `node-addon-require-builtin` 按**运行时指纹白名单**匹配，用非官方 Node 运行时（例如 Electron 内置 Node）实测被拒（`Unsupported/no-context`）→ 实例启动必然失败。core 的 `node-runtime.ts` 负责探测 + 探针校验 + 缓存，失败时给出中文诊断 |
+| 前端用 **WinUI 3 原生控件 + 内置 ThemeResource 令牌**，不自建设计系统 | 配色/字号/圆角全部来自官方，天然获得系统主题、高对比度与无障碍支持；避免"自绘一套 Fluent"必然带来的漂移 |
+| 前端与 core 之间用 **NDJSON 子进程桥接**，不用原生互操作 | core 是 TypeScript（约 7 000 行），用 Node 侧车承载可**零改写**复用；协议有 `__handshake` 运行时对账，能机械发现两端漂移 |
+| 契约走 `src/shared/contracts.ts` 单一事实源 | 桥接方法名 = `CH` 常量字面值；C# 侧 `Models/` 是它的机械镜像，通道数量在握手时断言 |
 
 ---
 
@@ -290,7 +307,10 @@ to false"）。启动器、dsh、pnpm 全都没有交互终端，因此 `childBa
 
 ## 6. 里程碑
 
-| 里程碑 | 内容 | 验收 |
+> ⚠ M1–M5 是**Electron 前端时代**的里程碑记录，其中"验收"列提到的构建/启动方式已随前端替换而改变。
+> 下表保留原样作为历史；**当前状态**见 [WinUI 3 交付报告](../winui3-重构交付报告.md)。
+
+| 里程碑 | 内容 | 验收（历史记录） |
 |---|---|---|
 | **M1 地基** | 脚手架、构建、契约、core 骨架 | `npm run build` 通过，Electron 空窗可启动 |
 | **M2 引擎** | instance / engine / profile / plugins / launch | core 单元测试全绿；能真实创建并启动一个实例 |
@@ -298,19 +318,32 @@ to false"）。启动器、dsh、pnpm 全都没有交互终端，因此 `childBa
 | **M4 进阶** | 存档共享、设置隔离、导入导出 | 两实例间会话互通验证通过 |
 | **M5 收口** | 独立代码审查、缺陷修复、端到端验收 | 审查问题清零；验收清单全通过 |
 
+**前端替换（2026-09，已完成）**：M1–M5 交付的 Electron 前端被整体替换为 WinUI 3，
+`src/core` 与契约未改一行。对应里程碑：
+
+| 阶段 | 内容 | 状态 |
+|---|---|---|
+| **R1 规范** | 基于 microsoft-ui-xaml 产出统一视觉规范（含出处索引） | ✅ 交付 |
+| **R2 桥接** | Node 侧车（NDJSON）+ C# 契约镜像与客户端 | ✅ 交付，冒烟 141/141 |
+| **R3 页面** | 8 个页面 + 外壳 + 浮层全部 XAML 重写 | ✅ 交付 |
+| **R4 拆除** | 旧前端（54 文件）物理删除 + 构建期引用断言 | ✅ 交付，`src/main/**` 引用数 = 0 |
+| **R5 审计** | 逐页真实截图视觉审计 9 个界面单元 | ✅ 交付，4 项"发现→修复→复检" |
+| **R6 收尾** | 渲染层 UI 自动化测试、教程图更新、残余清理、打包与同步 | ✅ 交付 |
+
 ---
 
 ## 7. 风险与对策
 
 | 风险 | 影响 | 对策 |
 |---|---|---|
-| Electron 二进制下载不可达 | 无法交付桌面应用 | **已前置验证**：本机 `%LOCALAPPDATA%\electron\Cache` 有 v41.1.0 与 v35.7.5 缓存；安装锁定 41.1.0 走缓存 |
+| ~~Electron 二进制下载不可达~~ | 无法交付桌面应用 | ✅ **已消除**：Electron 已随旧前端整体移除，不再需要它 |
 | npm 写工作区外 cache 遭沙箱 EPERM | 依赖装不上 | 所有 npm/pnpm 调用统一 `--cache <工作区内路径>` |
 | dsh 内部实现漂移 | 启动器失效 | 架构上只依赖 CLI + 文件系统约定；版本管理页标注兼容性风险 |
 | junction 权限 | 存档共享失败 | 用 junction（非 symlink），Windows 无需提权；失败时降级为"复制并标记"并在 UI 说明 |
 | patch 是整块替换 | 设置写坏插件配置 | 写入前读取当前生效值并整块重述；写前备份 `cordis.patch.yml` |
 | 长路径（>260） | 文件操作失败 | 实例名长度限制 + 路径拼接前校验 |
 | 自动放开 git 构建脚本 | 替用户放行了不该放行的包 | 只接受**与本仓库名相关**的提取结果（`<名>` 或 `@scope/<名>`），认不准就回退到仓库名；配置文件非对象/非映射时拒绝写入；`WHALES_PLUGIN_ALLOW_BUILDS=0` 可整体关闭 |
+| 桥接两端契约漂移 | 前端调用不存在的通道 | 方法名由 `CH` 常量在运行时导出，`__handshake` 返回真实列表，C# 侧启动即断言；构建期另有 `src/main/**` 引用数 = 0 的护栏 |
 
 ---
 

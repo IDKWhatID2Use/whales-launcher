@@ -1,0 +1,180 @@
+# ---------------------------------------------------------------------------
+# WhalesLauncher CI
+#
+# HONESTY RULE FOR THIS FILE - please read before adding a job.
+#
+#   GitHub-hosted `windows-latest` runners execute in SESSION 0 with no
+#   interactive desktop, no visible window station and no DWM. Everything the
+#   renderer test suite needs therefore does not exist there:
+#     * UI Automation cannot see or drive a window that is never composited;
+#     * PrintWindow(PW_RENDERFULLCONTENT) has no DirectComposition surface to
+#       capture, so screenshots come back black;
+#     * synthetic input (SendInput) has no foreground window to land in;
+#     * the app itself cannot reliably create a WinUI 3 window at all.
+#   Running `npm run test:ui` on a hosted runner would either hang, or - worse -
+#   produce a green run that proves nothing. It is therefore NOT part of the
+#   default pipeline. The `ui-tests` job below exists for a SELF-HOSTED runner
+#   that has an interactive desktop, is opt-in via workflow_dispatch, and is
+#   hard-disabled by default so nobody can mistake it for coverage.
+#
+#   What CI *can* verify without a desktop: the bridge protocol (NDJSON over
+#   stdio), the Node core unit tests, and that the WinUI 3 app compiles.
+#
+# Local (interactive desktop) commands, for the record:
+#   npm run test:ui                     # full renderer suite, exit code 0/1
+#   node scripts/test/run-ui-tests.mjs --list
+#   node scripts/test/run-ui-tests.mjs --page p1-instances
+#   npm run smoke:bridge
+#   npm run test:core
+# ---------------------------------------------------------------------------
+name: ci
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      run_ui_tests:
+        description: >-
+          Run the WinUI 3 renderer UI tests. ONLY works on a runner with an
+          interactive desktop (self-hosted). Leave false on GitHub-hosted
+          runners - they are session 0 and the UI tests cannot run there.
+        type: boolean
+        default: false
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # -------------------------------------------------------------------------
+  # Desktop-free verification. This is the part that is actually provable on a
+  # GitHub-hosted runner, and it is the part that gates the pipeline.
+  # -------------------------------------------------------------------------
+  build-and-test:
+    name: bridge + core + app build (headless)
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build bridge bundle
+        run: npm run build:bridge
+
+      - name: TypeScript typecheck
+        run: npm run typecheck
+
+      - name: Bridge smoke test (NDJSON protocol, 141 assertions)
+        run: npm run smoke:bridge
+
+      - name: Core unit tests
+        run: npm run test:core
+
+      - name: Build WinUI 3 app (compile-only)
+        run: dotnet build desktop/src/WhalesLauncher.App/WhalesLauncher.App.csproj -c Debug
+        # NOTE: this proves the XAML/C# compiles. It does NOT prove the window
+        # renders - that requires an interactive desktop (see the header).
+
+      - name: Summary
+        if: always()
+        shell: pwsh
+        run: |
+          @"
+          ## WhalesLauncher CI
+
+          | Step | Status |
+          |---|---|
+          | npm ci | ${{ steps.install.outcome || 'n/a' }} |
+          | build:bridge | ${{ job.status }} |
+          | smoke:bridge | ${{ job.status }} |
+          | test:core | ${{ job.status }} |
+          | dotnet build | ${{ job.status }} |
+
+          ### Renderer (WinUI 3) UI tests are NOT run here
+
+          GitHub-hosted ``windows-latest`` runners are **session 0**: no
+          interactive desktop, no window station, no DWM. UI Automation,
+          PrintWindow screenshots and synthetic input cannot work there, so the
+          UI suite would either hang or report a meaningless pass.
+
+          Run it locally, on a machine with a logged-in interactive desktop:
+
+          ```powershell
+          npm run test:ui                                          # full suite
+          node scripts/test/run-ui-tests.mjs --list                # list pages
+          node scripts/test/run-ui-tests.mjs --page p1-instances   # one page
+          ```
+
+          The suite writes ``docs/audit/ui-test-report.md`` and
+          ``docs/audit/ui-test-report.json`` and exits 0 only when every page
+          passes. It creates its own isolated data root under ``%TEMP%`` and
+          never touches ``instances/`` or ``engines/``.
+          "@ >> $env:GITHUB_STEP_SUMMARY
+
+  # -------------------------------------------------------------------------
+  # Renderer UI tests. Opt-in, and only meaningful on a self-hosted runner with
+  # an interactive desktop. Kept disabled by default on purpose: a green UI job
+  # on a headless runner would be a lie about coverage.
+  # -------------------------------------------------------------------------
+  ui-tests:
+    name: WinUI 3 renderer UI tests (needs an interactive desktop)
+    # `if: false` would disable the job unconditionally; this expression keeps
+    # the job defined and runnable while defaulting to "skipped" everywhere,
+    # because GitHub-hosted runners cannot satisfy the requirement.
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_ui_tests == true }}
+    runs-on: [self-hosted, windows, interactive-desktop]
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build bridge and app
+        shell: pwsh
+        run: |
+          npm run build:bridge
+          pwsh -File desktop/build-app.ps1
+
+      - name: Renderer UI tests
+        run: npm run test:ui
+
+      - name: Upload UI test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-test-report
+          path: |
+            docs/audit/ui-test-report.md
+            docs/audit/ui-test-report.json
+          if-no-files-found: warn

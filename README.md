@@ -1,7 +1,7 @@
 # WhalesLauncher
 
 > **DeepSeek Harness (dsh) 的实例与版本管理启动器**
-> Windows 11 · Electron 41 · TypeScript · 遵循 Windows 11 原生 Fluent Design
+> Windows 11 / 10 x64 · **WinUI 3 (C#/XAML)** · Windows App SDK · .NET 10 · Node.js 侧车业务引擎
 >
 > 仓库：<https://github.com/IDKWhatID2Use/whales-launcher>
 > 许可证：[Polyform Noncommercial 1.0.0](LICENSE) —— 非商业用途免费，**未经授权不得商用**
@@ -84,17 +84,21 @@ Windows 的 junction **不需要管理员权限**，也不需要开发者模式�
 
 ## 界面
 
-界面遵循 **Windows 11 原生 Fluent Design**：
+界面是 **原生 WinUI 3 桌面应用**（C# / XAML，Windows App SDK），控件与视觉令牌全部取自
+[`microsoft-ui-xaml`](https://github.com/microsoft/microsoft-ui-xaml) 官方体系 ——
+颜色、字号、圆角一律走 WinUI 内置 `{ThemeResource ...}`，**不自建色板、不硬编码 hex**：
 
-- **无边框窗口 + 系统原生窗口控制按钮**。采用 Window Controls Overlay（`titleBarStyle: 'hidden'` + `titleBarOverlay`），
-  最小化 / 最大化-还原 / 关闭三枚按钮由 **Windows 系统绘制** —— 因此它们拥有原生的 Fluent 反馈、
-  hover 关闭变红、最大化状态图标自动切换，并且保留 Snap Layouts。标题栏其余部分自绘，
-  通过 `env(titlebar-area-*)` 与运行时测得的 WCO 宽度精确拼接，**不与系统按钮重叠**。
-- **应用内自绘菜单**取代系统菜单栏，但**菜单项的快捷键文本来自主进程的同一份定义**
-  （`menuSpec()` 是唯一事实源），并有自动化断言守住"菜单显示的快捷键 ⊆ 真实绑定"，防止文案与绑定漂移。
-- **Mica 背景材质**（Windows 11 可用时启用，否则自动降级，不影响启动）。
-- 深浅双主题、跟随系统；统一的 Fluent 令牌体系（圆角、间距、动效曲线、语义色），
-  **无硬编码色值**（全部走 CSS 变量），并通过自动化脚本核算对比度。
+- **原生窗口 + 系统标题栏**。标题栏用官方 `TitleBar` 控件并入客户区（`ExtendsContentIntoTitleBar`），
+  窗口控制按钮由 Windows 绘制，因此原生 hover / Snap Layouts / 最大化图标切换全部保留。
+- **Mica 窗口底面**（系统支持时启用；Windows 10 或关闭透明效果时自动退回实色兜底层，不影响启动）。
+- **`NavigationView` 左侧导航 + `Frame` 内容区**，页面切换带动画与面包屑。
+- **深浅双主题**：主题按钮在标题栏内切换。注意：当前契约里 `LauncherConfig.theme` 只有
+  `'dark' | 'light'` **没有"跟随系统"**，因此界面上明确写着"不跟随系统"——这是如实呈现的契约缺口，
+  不是漏做（见[交付报告](docs/winui3-重构交付报告.md)「遗留问题」）。
+- **应用内 `MenuBar` 菜单**取代系统菜单栏；快捷键由 XAML `KeyboardAccelerator` 声明。
+- **日志渲染有硬上限**：增量渲染 + 行数上限，日志洪峰下不会卡死 UI。
+- **可访问性**：所有状态都有**文字**（不只靠颜色），`AutomationProperties` 齐备，
+  这也是渲染层 UI 自动化测试能按名称精确定位控件的前提。
 
 ![实例列表](docs/assets/screenshot-instances.png)
 
@@ -126,8 +130,9 @@ Windows 的 junction **不需要管理员权限**，也不需要开发者模式�
 - **存档管理**：会话列表（倒序、体积）、打开所在文件夹
 - **启动与停止**：实时日志流（stdout/stderr 分色、自动滚动、上滚暂停）、运行计时器、**自动端口避让**（多实例同时运行互不抢端口，实际端口写入日志/界面/台账）、web 实例自动探测地址并可一键打开
 - **实例包**：导出为 zip、从 zip 导入
-- **全局设置**：主题、主 home、registry、删除确认
-- **直接启动**：双击 `.bat` 即用（按需重建）、静默启动 `.vbs`、一键建桌面/开始菜单快捷方式
+- **全局设置**：主题、主题色、Node 运行时探测（含手动指定与重新检测）
+- **直接启动**：双击 `.bat` 即用，静默启动 `.vbs`，一键建桌面/开始菜单快捷方式
+- **质量保障**：桥接冒烟 141 项断言、C# 桥接客户端自验 62 项、**渲染层 UI 自动化测试**（逐页覆盖 8 个页面）、逐页视觉审计截图
 
 ---
 
@@ -135,26 +140,31 @@ Windows 的 junction **不需要管理员权限**，也不需要开发者模式�
 
 ### 环境要求
 
-- **Windows 10/11 x64**（Mica 材质与原生窗口按钮需要 Windows 11）
-- **Node.js ≥ 22**（开发与源码运行需要；本项目在 Node 26 上验证）
-- **独立的 Node.js ≥ 20 用于运行 dsh 实例**（可以与上面同一个，但**不能**是启动器内置的
-  Electron 运行时 —— 原因见下）
+| 组件 | 版本 | 用途 |
+|---|---|---|
+| **Windows 10/11 x64** | 10.0.17763 及以上 | Mica 与原生窗口按钮需要 Windows 11；Windows 10 自动退回实色底面 |
+| **.NET 10 桌面运行时** | 10.x | 运行已构建的应用（若自行构建则需 **.NET 10 SDK**） |
+| **Node.js** | ≥ 22（本项目在 26 上验证） | 侧车业务引擎；**应用运行时必需** —— 没有它应用能开但看不到数据 |
+| **独立的 Node.js** | ≥ 20 用于跑 dsh 实例 | 可以与上面同一个 |
 
 > **为什么实例必须有独立的 Node.js**
-> dsh 依赖原生模块 `node-addon-require-builtin` 从 V8 内部取 Node 内建模块，它的实现**按
-> 运行时指纹白名单**匹配。启动器自己跑在 Electron 里，其内置 Node 的指纹（例如 Electron 41
-> 的 `V8 14.6.202.26-electron.0`）不在 dsh 的支持列表内，启动会直接失败：
+> dsh 依赖原生模块 `node-addon-require-builtin` 从 V8 内部取 Node 内建模块，其实现**按运行时
+> 指纹白名单**匹配。若用非官方 Node 运行时（例如 Electron 内置 Node 的
+> `V8 14.6.202.26-electron.0`）跑 dsh，指纹不在支持列表内，启动会直接失败：
 >
 > ```
 > Error: dsh: host preparation failed: node-addon-require-builtin unsupported:
 >   Unsupported/no-context (unsupported Electron runtime fingerprint: ...)
 > ```
 >
-> 因此启动器改为**探测并调用真正的 Node.js**（`src/core/node-runtime.ts`）。解析顺序：
-> `$WHALES_NODE_PATH` → `launcher.json` 的 `nodePath` → 启动器自身（源码模式）→
-> 系统 `PATH` → 常见安装位置（nvm-windows / Volta / fnm / 官方安装包）。
-> 每个候选都会**实际执行一次探针**（`node -e` 读取 `process.versions`）后才判定可用，
-> 绝不按路径名猜测。界面入口：**全局设置 → Node 运行时**（可看探测结果、手动指定、重新检测）。
+> 因此启动器**探测并调用真正的 Node.js**（`src/core/node-runtime.ts`）。解析顺序：
+> `$WHALES_NODE_PATH` → `launcher.json` 的 `nodePath` → 系统 `PATH` → 常见安装位置
+> （nvm-windows / Volta / fnm / 官方安装包）。每个候选都会**实际执行一次探针**
+> （`node -e` 读取 `process.versions`）后才判定可用，绝不按路径名猜测。
+> 界面入口：**全局设置 → Node 运行时**（可看探测结果、手动指定、重新检测）。
+>
+> 侧车进程同样需要 Node：C# 侧以 `node dist/bridge/server.cjs --home <root>` 拉起它。
+> Node 缺失时应用仍会启动，但会在界面上报"后端已断开"。
 
 ### 首次安装
 
@@ -163,28 +173,37 @@ Windows 的 junction **不需要管理员权限**，也不需要开发者模式�
 ```powershell
 git clone https://github.com/IDKWhatID2Use/whales-launcher.git
 cd whales-launcher
-npm install
+npm install          # 只装构建桥接所需的依赖（esbuild / typescript / js-yaml / adm-zip）
 ```
 
-`postinstall` 会自动执行 `scripts/setup-electron.mjs`：若 `electron` 自身的 postinstall
-已下载好二进制就直接采用；否则尝试从 `%LOCALAPPDATA%\electron\Cache` 离线铺设。
-两条路都走不通时该脚本会**明确报错并给出处理办法**（不会静默失败）。
+> 本项目**不再有 `postinstall`**：旧前端时代那个自动铺设 Electron 运行时的步骤已随 Electron 一起移除。
 
-> 以下两行是**原始开发机的额外步骤，不是通用要求**：该机的 shell 环境注入了
-> `npm_config_cache` 并指向工作区外，会压过项目配置，因此必须显式指定缓存目录。
->
-> ```powershell
-> $env:npm_config_cache = 'F:\WhalesLauncher\.npm-cache'
-> npm install --cache 'F:\WhalesLauncher\.npm-cache'
-> ```
-
-### 构建与启动
+### 构建
 
 ```powershell
-npm run build     # 只构建（含类型门禁与 dist.tmp 原子替换）
-npm run launch    # 按需构建后启动（等价于双击下面的 .bat）
-npm start         # 强制重建后启动
+npm run build        # = build:bridge && build:app
+npm run build:bridge # 只打桥接：scripts/build-bridge.mjs -> dist/bridge/server.cjs
+npm run build:app    # 只打应用：desktop/build-app.ps1（带命名 Mutex 串行化）
 ```
+
+`npm run build:app` 走 `desktop/build-app.ps1`，它解决三件反复消耗团队时间的事：
+
+1. **并发构建互相踩 `obj\`**（`CS2012 ... being used by another process`）→ 用命名 Mutex
+   `Global\WhalesLauncherWinUI3Build` 串行化，并把锁竞争自动重试 8 次；
+2. **XAML 编译器的诊断被 locale 吞掉** → 清掉 `DOTNET_CLI_UI_LANGUAGE` 与 `VSLANG`
+   （两者任意一个都会让真实错误退化成误导性的 `WMC9999 资源找不到`）；
+3. **`obj\` 锁竞争引发的假错误** → 自动识别并重试，而不是直接失败。
+
+> ⚠ **不要给 `build-app.ps1` 加 `-Rebuild`**。`-t:Rebuild` 在本工程会报
+> `CS2001 ... GeneratedMSBuildEditorConfig.editorconfig` —— 那是 `-t:Rebuild` 与并发构建交互的
+> 产物，**不是**代码问题。该开关保留在脚本里属历史遗留，请勿使用。
+
+构建产物：
+
+| 产物 | 路径 |
+|---|---|
+| 应用 | `desktop/src/WhalesLauncher.App/bin/<配置>/net10.0-windows10.0.26100.0/win-x64/WhalesLauncher.exe` |
+| 桥接 | `dist/bridge/server.cjs`（构建期断言 `src/main/**` 引用数 = 0） |
 
 ### 直接启动（双击即用）
 
@@ -192,37 +211,24 @@ npm start         # 强制重建后启动
 
 | 入口 | 行为 | 适合谁 |
 |---|---|---|
-| **`启动 WhalesLauncher.bat`** | 双击即启动；产物过期会自动重建。构建/启动失败时**窗口保留**并给出原因与日志路径 | 日常使用、排查问题 |
-| **`WhalesLauncher.vbs`** | 无控制台窗口的静默启动；失败弹窗提示并指向日志 | 由快捷方式调用 |
+| **`启动 WhalesLauncher.bat`** | 双击即启动（应用已构建时）；未构建会给出明确的构建提示。支持 `--build` / `--check` / `--wait` | 日常使用、排查问题 |
+| **`WhalesLauncher.vbs`** | 无控制台窗口的静默启动；启动失败会弹窗并把原因与日志路径一起给出 | 由快捷方式调用 |
 | **`创建桌面快捷方式.bat`** | 在**桌面**与**开始菜单**各建一个快捷方式（指向上面那个 .vbs） | 装一次，之后从开始菜单搜索启动 |
 
-三个入口都走同一份实现（[`scripts/launch.mjs`](scripts/launch.mjs)），做事顺序一致：
-
-1. **环境自检** —— 确认 `node_modules/electron/dist/electron.exe` 到位；缺失时只用本机缓存离线修复（`scripts/setup-electron.mjs`），绝不联网；
-2. **按需构建** —— 产物齐全且比 `src/**` 新就直接启动（**双击即开**）；源码改过才跑 `npm run build`，且构建失败**不会**摧毁上一份可用产物；
-3. **启动并留证** —— Electron 的 stdout/stderr 直通控制台，同时写日志（见下）。
-
-出问题时先看 **`logs\launcher-summary.log`**：每次启动覆盖写，一屏之内给出时间、入口、
-构建决策、实际执行的命令、退出码结论与 Electron 日志末尾 —— 这是「双击没反应」时
-最该先打开的那一个文件。
-
-想从终端传参就给 `.bat` 加参数（`--rebuild` / `--skip-build` / `--dry-run` / `--help`）：
+三个入口共享同一份实现 [`scripts/launch-app.ps1`](scripts/launch-app.ps1)：定位最新的
+`WhalesLauncher.exe` → 启动 → 退出。`--check` 可以只看它会启动哪个 exe（不改动任何东西）：
 
 ```powershell
-"启动 WhalesLauncher.bat" --rebuild      # 强制重建再启动
-"启动 WhalesLauncher.bat" --skip-build   # 直接用现有 dist 启动（调试产物时最快）
-"启动 WhalesLauncher.bat" --help         # 全部选项
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\launch-app.ps1 -Check
 ```
 
-> **为什么没有单文件 .exe**：把 `.bat` **编译**成 exe 并不会改变什么 —— 它照样要调用
-> `node` 与 `node_modules/electron`，只是把脚本藏在 exe 里，反而让排查变难。
-> 真正的单文件分发要上 electron-builder / electron-forge 之类的打包器，把整个
-> Electron 运行时（约 200 MB）打进安装包；本项目在**开发环境**运行，暂不需要，
-> 且本机无法访问 github.com（打包器的依赖下不来）。真要打包时，
-> 入口仍是 `dist/main/index.cjs`，与现在完全一致。
+> 三个入口都**必须在代码页 936 下安全**（`.bat` / `.vbs` / `.ps1` 一律纯 ASCII，中文只出现在
+> 文件名里）。原因写在每个文件头：cmd 与 WSH 按活动代码页读文件，UTF-8 中文会被撕成
+> 包含 `'` `"` `\` 的乱码字节并**静默破坏命令解析** —— 本项目在这上面实际踩过三次。
 
-> **首次使用前请确认依赖已装好**（见上一节）。若没装，双击 `.bat` 会明确告诉你缺什么，
-> 而不是闪一下就没了。
+> **关于"过期二进制"**：启动入口**不会**自动重建。改了源码后请显式 `npm run build`
+> （或 `启动 WhalesLauncher.bat --build`）。这比"悄悄用旧产物"更可预期，也让"我改的代码为什么
+> 没生效"这类问题少一次排查。
 
 ### 图标
 
@@ -233,17 +239,21 @@ npm start         # 强制重建后启动
 ### 其它命令
 
 ```powershell
-npm run typecheck    # TypeScript 类型检查（零错误为通过）
-npm test             # 运行测试（进程内 runner，26 秒左右）
+npm run typecheck    # TypeScript 类型检查（只覆盖保留的 src/**，零错误为通过）
+npm test             # core 单元测试（17 项，exit 0 为通过）
+npm run test:ui      # 渲染层 UI 自动化测试（逐页覆盖 8 个页面）—— 需要交互式桌面
+npm run smoke:bridge # 桥接冒烟（141 项断言，在临时 home 上跑）
+npm run audit:visual # 逐页视觉审计截图
 npm run icon         # 重新生成 assets/whales.ico
 npm run shortcut     # 重建桌面/开始菜单快捷方式
 npm run clean        # 清理 dist/
 ```
 
-> **教程截图是可复现的**：`npm run shots:tutorial` 会用无头 Chromium + CDP 驱动渲染层，
-> 按固定脚本走完各路由并截图到 `docs/assets/tutorial/` —— 界面改动后重跑一次即可，
-> 不会留下过期的文档图。加 `-- --list` 看全部场景，`-- --only <关键词>` 只跑其中几张。
-> 详见 [使用教程](docs/guide/README.md)。
+> **教程截图是可复现的**：截图脚本在 `scripts/tutorial/`，逐页深链驱动真实应用窗口
+> （`PrintWindow` + `PW_RENDERFULLCONTENT`，能截到 WinUI 3 的 DirectComposition 内容），
+> 输出到 `docs/assets/tutorial/`。改动界面后重跑即可，不会留下过期的文档图。
+> 复跑命令与「哪张图对应哪个页面、数据来自真实还是临时演示实例」见
+> [`docs/assets/tutorial/CORRESPONDENCE.md`](docs/assets/tutorial/CORRESPONDENCE.md)。
 
 ---
 
@@ -255,35 +265,49 @@ npm run clean        # 清理 dist/
 WhalesLauncher.vbs        # ← 静默启动（快捷方式指向它；同样必须纯 ASCII）
 创建桌面快捷方式.bat        # ← 建桌面/开始菜单快捷方式
 assets/whales.ico         # ← 应用图标（scripts/make-icon.mjs 生成，勿手改）
+desktop/
+├── build-app.ps1         # 应用构建入口（命名 Mutex 串行化 + obj 锁重试；勿加 -Rebuild）
+├── bridge/               # Node 侧车：NDJSON over stdio 的桥接层
+│   ├── server.mjs        #   服务器入口（动态 import src/core）
+│   ├── validate.mjs      #   参数校验（自旧 src/main/ipc.ts 原样搬运）
+│   ├── host.mjs          #   host: 宿主方法（反向请求 C#）
+│   ├── events.mjs        #   log:chunk / log:state 事件推送
+│   └── config-store.mjs  #   launcher.json 读写
+└── src/WhalesLauncher.App/
+    ├── App.xaml(.cs)     # 应用入口与后台装配
+    ├── MainWindow.xaml   # 应用外壳（标题栏 / 左实例栏 / 日志抽屉 / 菜单）
+    ├── Shell/            # 外壳组件（菜单构建、实例栏、日志抽屉、宿主方法注册）
+    ├── Views/            # 8 个页面（Instances / InstanceDetail+Detail / Engines / Wizard / Settings）
+    ├── Controls/         # 跨页共享控件（PageHeader / ToastHost）
+    ├── Services/         # CoreBridge（NDJSON 客户端）、AppState、导航、格式化、校验、对话框
+    ├── Models/           # 契约镜像（src/shared/contracts.ts 的机械对应）
+    └── Themes/Tokens.xaml
 scripts/
-├── build.mjs             # 构建（tsc 门禁 → dist.tmp → 原子替换）
-├── launch.mjs            # 三个启动入口共用的实现：自检 / 按需构建 / 启动 / 诊断
+├── launch-app.ps1        # 三个启动入口共用的实现（纯 ASCII）
+├── build-bridge.mjs      # 打包桥接为 dist/bridge/server.cjs（含 src/main 引用数=0 断言）
 ├── make-icon.mjs         # 程序化生成多尺寸 ico（零依赖）
 ├── make-shortcut.ps1     # 建快捷方式（纯 ASCII，见文件头注释）
-└── setup-electron.mjs    # 离线铺设 Electron 运行时
+├── audit/                # 窗口截图工具、逐页视觉审计、桥接冒烟
+├── test/                 # 渲染层 UI 自动化测试（UIA 驱动 + 逐页用例）
+└── tutorial/             # 教程截图复跑脚本
 src/
-├── shared/contracts.ts   # 冻结契约：类型、IPC 通道表、CoreApi / WhalesApi
-├── core/                 # 纯 Node/TS 引擎，无 Electron 依赖，可独立测试
-│   ├── fsx.ts            # 文件工具（原子写、junction 安全解除）
-│   ├── paths.ts          # 路径解析
-│   ├── names.ts          # 命名校验（复刻 dsh profile 规则）
-│   ├── instance.ts       # 实例 CRUD 与共享模式落地
-│   ├── engine.ts         # 引擎版本安装/枚举
-│   ├── profile.ts        # profile 读写（package.json / cordis.patch.yml / settings.yaml）
-│   ├── plugins.ts        # 插件增删（走 dsh plugin CLI）
-│   ├── launch.ts         # 子进程启动与运行时状态
-│   ├── saves.ts          # 会话枚举
-│   └── modpack.ts        # 实例包导入导出
-├── main/                 # Electron 主进程（窗口、IPC 路由、进程编排）
-├── preload/              # contextBridge 暴露 window.whales（零 ipcRenderer 泄漏）
-└── renderer/             # 界面（原生 TS + CSS，无 UI 框架）
+├── shared/contracts.ts   # 冻结契约：类型、通道表（CH）、CoreApi / WhalesApi
+└── core/                 # 纯 Node/TS 引擎，无任何 UI/Electron 依赖，可独立测试
+    ├── fsx.ts  paths.ts  names.ts          # 文件工具 / 路径解析 / 命名校验
+    ├── instance.ts engine.ts profile.ts    # 实例 CRUD / 引擎安装 / profile 读写
+    ├── plugins.ts plugin-packs.ts          # 插件增删 / 组合包
+    ├── launch.ts proc.ts ports.ts          # 子进程启动 / 运行时状态 / 端口分配
+    ├── saves.ts modpack.ts                 # 会话枚举 / 实例包导入导出
+    └── node-runtime.ts runtime.ts          # Node 运行时探测 / 运行时信息
 ```
 
-> `logs/` 下是启动器自身的日志，三种各司其职：
-> **`launcher-summary.log`**（每次启动覆盖，人读的汇总结论，排查先看它）、
-> **`launcher-<时间戳>.log`**（Electron 日志，保留最近 5 份）、
-> **`launcher-console-<时间戳>.log`**（快捷方式路径下 shell 层的兜底输出，只兜"node 没跑起来"，
-> 保留 7 天）。固定名日志（快捷方式用的 `launcher-shortcut.log`）会把上一份归档到 `logs/history/`。
+> **历史说明**：旧前端（`src/main/**` Electron 主进程、`src/preload/**`、
+> `src/renderer/**` DOM 渲染层）已在 commit `ed93af9` **物理删除**，共 54 个文件。
+> 上面的目录树是**替换后**的真实结构。需要查阅被删文件时用
+> `git show ed93af9^:<路径>`（`ed93af9^` = 拆除前快照）。
+
+> `logs/` 下是启动器与应用自身的日志（`.gitignore` 已排除）：应用侧诊断写在
+> `logs/`，启动入口的诊断写在 `logs\launcher-console-<时间戳>.log`（保留 7 天）。
 
 ---
 
@@ -310,68 +334,86 @@ src/
 | 现象 | 原因 | 处理 |
 |---|---|---|
 | `npm install` 报 `EPERM ... F:\NodeJS\node_cache` | shell 注入了 `npm_config_cache`，npm 优先级为 **命令行 > 环境变量 > 项目 .npmrc**，压过了项目配置 | 显式 `--cache F:\WhalesLauncher\.npm-cache` 并先设 `$env:npm_config_cache` |
-| 构建/安装报 `spawn EPERM` | 受限沙箱禁止带管道 stdio 的 spawn（esbuild JS API、npm postinstall 都依赖它） | 构建已改用 esbuild CLI + `stdio:'inherit'`；安装用 `--ignore-scripts` |
-| Electron 二进制下载失败 | 本机无法访问 github.com | 从 `%LOCALAPPDATA%\electron\Cache` 离线铺设：`npm run setup:electron` |
-| `electron .` 立即崩溃（crashpad "not connected"） | Chromium 需要命名管道与 mojo IPC，受限沙箱禁止 | 在普通（非沙箱）终端运行 |
+| 构建/安装报 `spawn EPERM` | 受限沙箱禁止带管道 stdio 的 spawn（esbuild JS API 等依赖它） | 桥接打包已改用 esbuild 直接产出；安装用 `--ignore-scripts` |
 | `npm test` 报 `spawn EPERM` | `node --test` 的 runner 为每个文件 spawn 带管道的子进程 | 已改用 `--test-isolation=none`（同进程运行） |
-| 实例启动即失败，stderr 含 `node-addon-require-builtin unsupported: Unsupported/no-context` | 曾经用 Electron 的 `process.execPath`（electron.exe）+ `ELECTRON_RUN_AS_NODE=1` 当 Node 跑 dsh；dsh 的原生模块只识别特定 Electron 版本 | **已修复**：改用真正的 Node.js（`src/core/node-runtime.ts`）。若本机 Node 不在 PATH 上，在「全局设置 → Node 运行时」指定 `node.exe`，或设 `$env:WHALES_NODE_PATH` |
+| 从裸 PowerShell 工具进程拉起的应用窗口无法交互 | 受限沙箱禁止命名管道 | 在普通终端运行；UI 自动化测试同理需要交互式桌面 |
+| 实例启动即失败，stderr 含 `node-addon-require-builtin unsupported: Unsupported/no-context` | 曾经用 Electron 的 `process.execPath`（electron.exe）+ `ELECTRON_RUN_AS_NODE=1` 当 Node 跑 dsh；dsh 的原生模块只识别特定 Node 版本指纹 | **已修复**：改用真正的 Node.js（`src/core/node-runtime.ts`）。若本机 Node 不在 PATH 上，在「全局设置 → Node 运行时」指定 `node.exe`，或设 `$env:WHALES_NODE_PATH` |
 | 实例启动失败，stderr 含 `EADDRINUSE ... :3080` | web profile 默认监听 3080，已被别的实例或别的程序占用 | 给该实例的启动参数加 `--port <其它端口>`（`launch.appArgs`），或先结束占用者；启动器的失败提示里也会写出来 |
 
 ---
 
 ## 验证与验收
 
-### 三道构建自保
+本项目对"能跑"的定义是**机械可复现的证据**，而不是自述。全部验证入口如下。
 
-`npm run build` 不是一条裸命令，它内置了三层保护：
+### 四层验证
 
-1. **构建前类型门禁**：先跑 `tsc --noEmit`，非 0 立即中止且**不动旧产物**。
-   为什么需要它 —— esbuild **不做类型检查**，它能把"引用了未定义标识符"的源码照样打包成功并返回 0。
-   实测踩过：core 处于编辑中间态时构建返回 0、产物齐全，但 `electron .` 启动即抛 `ReferenceError`。
-2. **原子替换**：构建到 `dist.tmp/` → 四个必需产物齐全 → 才替换 `dist/`。
-   失败构建不再摧毁上一份可用产物（早期版本"先 `rm -rf dist` 再构建"，一次失败就让应用起不来）。
-3. **产物加载验证**：`node tests/dist/verify-dist.cjs` 直接 `require` 真实产物（替身 electron），
-   断言模块初始化不抛错、窗口参数齐备、IPC 通道注册、`index.html` 引用无断链。
+| 层 | 命令 | 当前结果 |
+|---|---|---|
+| 桥接契约 | `npm run smoke:bridge` | **141/141 通过**，退出码 0（临时 home 隔离） |
+| 桥接运行时 | C# 客户端自验（`.probe/corebridge-verify`） | **62/62 通过**，含对真 `dist/bridge/server.cjs` 的握手 |
+| C# 编译 | `npm run build:app` | 退出码 0，**0 错误** |
+| 渲染层 | `npm run test:ui` | 见 [`docs/audit/ui-test-report.md`](docs/audit/ui-test-report.md) |
+| 逐页视觉 | `npm run audit:visual` | 8 张真实截图 + 45 条判据，见 [`docs/audit/`](docs/audit/README.md) |
+
+### 构建期护栏
+
+`npm run build:bridge` 不只是打包，它内置一条**机械断言**：用 esbuild 的 `--metafile`
+统计模块图，若 `src/main/**` 的引用数不为 0 就直接失败。这条断言的价值在于：即使将来有人
+误把已删除的旧前端路径写回某个 import，构建也会立刻红，而不是等到运行时才炸。
 
 ### 回归命令
 
 ```powershell
-npm run typecheck                       # 类型检查（应 exit 0）
-npm test                                # 核心测试（16 文件，exit 0 为通过）
-node tests/e2e/53-port-acceptance.mjs 8 # 端口验收：8 实例同时启动不冲突 + 外部占用自动避让（真实 dsh 引擎）
-node tests/core/launch-real-dsh.test.mjs # 真实 dsh：用真 Node 启动实例（--port 0，不占 3080）
-node tests/dist/verify-dist.cjs         # 产物可加载性 + 静态资源 SHA256 对账
-node tests/dist/node-runtime-check.cjs  # Node 运行时探测 + nodePath 配置（自动还原 launcher.json）
-node tests/dist/qr08-check.cjs          # 引擎体积惰性计算
-node .spike/smoke/run.mjs               # 渲染层交互冒烟（演示模式，exit 0 为通过）
-node .spike/smoke/real-mode.mjs         # 渲染层真实桩冒烟（28 项）
-node tests/e2e/run-all.mjs              # 独立审查者的端到端用例集
-npm run launch -- --dry-run             # 启动链路自检（环境 + 按需构建判定，不开窗口）
+npm run typecheck                        # 类型检查（应 exit 0）
+npm test                                 # core 单元测试（17 项通过，exit 0）
+npm run smoke:bridge                     # 桥接冒烟（141 断言）
+npm run test:ui                          # 渲染层 UI 自动化（需要交互式桌面）
+npm run test:ui -- --page instances      # 只跑某一页，便于快速复跑
+npm run build                            # 桥接 + 应用，均应 exit 0
 ```
 
-> **`.spike/` 未纳入版本库**（见 `.gitignore`：该目录含指向真实 `~/.dsh` 的 junction 与大量本机
-> QA 产物，体积 24 MB），所以上面两条渲染层冒烟命令**只在原始开发机上可用**，clone 下来的仓库没有这个目录。
->
-> 在原开发机上，`.spike/smoke/node_modules` 是 **jsdom 的唯一安装位置**（未声明在 `package.json`），
-> 清理时**不可删除**，否则两条渲染层冒烟会静默失效。详见 `.spike/smoke/README.md`。
+> **需要交互式桌面才能跑的项**（本项目在受限沙箱里实测过边界）：
+> `test:ui` 与 `audit:visual` 依赖真实窗口与 UI Automation。
+> 在 GitHub-hosted runner（session 0，无交互式桌面）上这两项**无法可靠运行**，
+> 因此 [CI workflow](.github/workflows/ci.yml) 只跑构建与桥接/core 测试，
+> 并对 UI 测试**显式标注为需要交互式桌面、默认跳过** —— 不会制造"UI 测试已通过"的假象。
 
-### 无法在本机验证的项（需要在普通桌面环境复核）
+### 已知失效的旧测试（如实声明，未修复）
 
-这三项**不是缺陷，而是开发环境的观测窗口被关闭**（沙箱禁止 Chromium 所需的命名管道、对进程树有 job object 级包容、CDP 取不到 DWM 合成的 Mica）：
+`tests/e2e/**` 与 `tests/dist/**` 是 Electron 时代的端到端套件，其中一部分**依赖已删除的
+旧前端源码与产物**，当前会失败：
+
+| 范围 | 状态 | 原因 |
+|---|---|---|
+| `tests/e2e/**` | 15 个用例中 **6 个必失败** | 引用已删除的 `src/renderer/**` 等路径 |
+| `tests/e2e/50-status-recheck.mjs` | 首个坏行在 QR-04 块内，其后 QR-05…QR-17 **不再执行** | 同上 |
+| `tests/dist/verify-dist.cjs` | 失败 | 校验旧产物（`src/renderer` 源码缺失，`hash()` 无 `existsSync` 保护） |
+| `tests/e2e/run-all.mjs` | **当前必然 exit 1** | 总入口硬编码清单，含会启停实例的用例 |
+
+> ⚠ `tests/e2e/run-all.mjs` **不要直接跑**：它会执行 `31-stop-probe` / `32-stop-verify`
+> 这类会**启停真实实例**的用例。这与"不得擅自启停用户实例"的边界冲突。
+> 这些套件的**处置建议与逐条清单**见 [`docs/cleanup/legacy-residue-inventory.md`](docs/cleanup/legacy-residue-inventory.md)；
+> 本轮**未删除**它们，以免丢失回归保护、也避免"删掉测试让套件变全绿"这种自欺。
+
+### 无法在受限环境验证的项（需要在普通桌面环境复核）
+
+以下几项**不是缺陷，而是原始开发机的受限沙箱把观测窗口关掉了**（受限文件沙箱、禁止命名管道、
+对进程树有 job object 级包容、取不到 DWM 合成的 Mica）。在普通 Windows 机器上通常不会遇到。
 
 | 项 | 现象 | 一键验证 |
 |---|---|---|
-| 真实窗口与交互 | 拖动、双击最大化、Snap Layouts、三按钮 hover 变红、Mica 观感 | 双击 `启动 WhalesLauncher.bat`（或 `npx electron .`） |
+| 真实窗口与交互 | 拖动、双击最大化、Snap Layouts、窗口按钮 hover 变红、Mica 观感 | 双击 `启动 WhalesLauncher.bat` |
 | 进程树真杀 | 本机 `taskkill` 恒返回 Access denied，且沙箱自动包容进程树 → 差异不可观测 | `node tests/core/degraded-records.test.mjs` |
-| 真实 dsh 完整链路 | 受"不得触碰真实 `~/.dsh`"边界约束，用**临时 root + 真实引擎**验证；实例界面（浏览器窗口）本身无法在无桌面环境观察 | `node tests/core/launch-real-dsh.test.mjs`（自动创建/启动/停止，`--port 0` 不抢端口） |
-| 往桌面/开始菜单写快捷方式 | 写工作区之外被文件沙箱拒绝（实测 `Unable to save shortcut`）→ 脚本按设计回落到项目内的 `快捷方式\` 目录（目录名由 `scripts/make-shortcut.ps1` 以字符码拼出，避免批处理编码问题） | 在普通终端运行 `创建桌面快捷方式.bat` |
+| 真实 dsh 完整链路 | 受"不得触碰真实 `~/.dsh`"边界约束，用**临时 root + 真实引擎**验证；实例的浏览器窗口本身无法在无桌面环境观察 | `node tests/core/launch-real-dsh.test.mjs`（自动创建/启动/停止，`--port 0` 不抢端口） |
+| 往桌面/开始菜单写快捷方式 | 写工作区之外被文件沙箱拒绝（实测 `Unable to save shortcut`）→ 脚本按设计回落到项目内的 `快捷方式\` 目录 | 在普通终端运行 `创建桌面快捷方式.bat` |
+| 高对比主题 / 150% 文本缩放 | 未走查 | Windows 设置 → 辅助功能 → 对比度主题 / 文本大小 |
 
-> **直接启动的验证边界（如实声明）**：`.bat` 的真启动已在带虚拟终端的会话中实测通过
-> （Electron 起 4 个进程、窗口标题为 `WhalesLauncher —— dsh 实例与版本管理`、退出码 0），
-> `.vbs` 静默路径、单实例切前台、日志轮转与快捷方式回落的**失败分支**全部实测。
-> 但**从裸 PowerShell 工具进程直接拉 Electron 会失败**（`mojo ... 拒绝访问`）——
-> 这是本会话沙箱禁止命名管道所致，不是应用缺陷：同样一条命令在虚拟终端里成功、
-> 在沙箱工具进程里失败，差异来自环境而非代码。
+> **启动链路的验证边界（如实声明）**：三个入口（`.bat` / `.vbs` / `launch-app.ps1`）的
+> **语法与解析**已实测（`.vbs` 经 `cscript` 执行无语法错误、`.bat` 经 cmd 执行无解析错误），
+> 启动器的 `--check` 路径已实测输出正确的 exe 路径与大小。
+> 但**从裸 PowerShell 工具进程里拉起的窗口无法交互**（沙箱禁止命名管道），
+> 因此"双击后窗口长什么样"这一项请在普通终端复核。
 
 ---
 
@@ -380,12 +422,16 @@ npm run launch -- --dry-run             # 启动链路自检（环境 + 按需�
 | 文档 | 内容 |
 |---|---|
 | [**使用教程（图文）**](docs/guide/README.md) | **面向使用者的完整指引：安装 → 五分钟上手 → 实例/引擎/插件/设置/存档管理 → 隔离与共享 → 故障排查。全部截图由脚本生成，可复现** |
+| [**WinUI 3 交付报告**](docs/winui3-重构交付报告.md) | **本轮前端替换式重构的完整交付说明：视觉规范摘要、架构、拆除记录、逐页审计结论、遗留问题** |
+| [视觉规范](docs/design/winui3-visual-spec.md) | WinUI 3 统一视觉规范（每条规格都有 microsoft-ui-xaml 出处） |
+| [桥接协议](docs/design/winui3-bridge-protocol.md) | C# ↔ Node 侧车的 NDJSON 协议 v1（已冻结） |
+| [C# 工程约定](docs/design/winui3-csharp-conventions.md) | 命名空间、契约镜像规则、分层依赖方向 |
+| [旧前端拆除方案](docs/design/legacy-teardown-plan.md) | 拆除清单与依赖反查证据 |
+| [旧 UI 残余清单](docs/cleanup/legacy-residue-inventory.md) | 清理审计：死引用/陈旧文档/需保留项逐条列示 |
 | [dsh 接口勘察](docs/research/dsh-interface.md) | dsh CLI、`$DSH_HOME` 解析、profile 结构、配置层组合顺序（均源码级确认） |
-| [总体设计方案](docs/design/architecture.md) | 概念映射、目录布局、分层架构、数据模型、核心流程、里程碑 |
+| [总体设计方案](docs/design/architecture.md) | 概念映射、目录布局、分层架构、数据模型、核心流程（⚠ 技术栈章节为旧前端时代，界面与构建入口已过时） |
 | [自动端口分配设计说明](docs/design/port-allocation.md) | 端口来源与源码依据、三层防护、决策顺序、边界情况、验收实测结果 |
-| [UI 设计方案](docs/design/ui-redesign.md) | Windows 11 Fluent 视觉规范、标题栏/菜单规格、设计令牌 |
-| [UI 验收标准](docs/design/ui-acceptance-criteria.md) | 一致性判据、反模式清单、评分卡、整改清单模板 |
-| [代码审查报告](docs/review/code-review.md) | 独立审查发现的问题与处置 |
+| [UI 审计说明](docs/audit/README.md) | 截图工具用法、判据含义、状态码定义（pass / fail / unverifiable） |
 
 ---
 
