@@ -1,0 +1,59 @@
+{
+  "schema": "whaleslauncher.tutorial.plan/1",
+  "description": "Guide screenshots, batch C: the four wizard steps. The wizard is opened from the instances page (the create smoke route races the first page load), the name is typed for real, and the steps are switched through the step bar's SelectionItemPattern.",
+  "exe": "F:\\WhalesLauncher\\desktop\\src\\WhalesLauncher.App\\bin\\Debug\\net10.0-windows10.0.26100.0\\win-x64\\WhalesLauncher.exe",
+  "home": "F:\\Temp\\whales-tutorial-home",
+  "outDir": "F:\\WhalesLauncher\\docs\\assets\\tutorial",
+  "sessions": [
+    {
+      "id": "wizard",
+      "route": "instances",
+      "waitMs": 11000,
+      "shots": [
+        {
+          "name": "07-wizard-step1-name",
+          "steps": [
+            { "Type": "uia", "Action": "invoke", "Ct": "Button", "Name": "新建实例", "TimeoutMs": 5000 },
+            { "Type": "wait", "Ms": 4000 },
+            { "Type": "uia", "Action": "focus", "Ct": "Edit", "NameLike": "实例名称", "TimeoutMs": 5000 },
+            { "Type": "wait", "Ms": 600 },
+            { "Type": "text", "Value": "演示工作台" },
+            { "Type": "wait", "Ms": 800 },
+            { "Type": "uia", "Action": "focus", "Ct": "Edit", "NameLike": "备注", "TimeoutMs": 5000 },
+            { "Type": "wait", "Ms": 500 },
+            { "Type": "text", "Value": "教程截图用的演示实例" },
+            { "Type": "wait", "Ms": 1200 },
+            { "Type": "uia", "Action": "dump" }
+          ]
+        },
+        {
+          "name": "08-wizard-step2-engine",
+          "baseline": "07-wizard-step1-name",
+          "steps": [
+            { "Type": "uia", "Action": "select", "Ct": "ListItem", "NameLike": "2 引擎版本", "TimeoutMs": 5000 },
+            { "Type": "wait", "Ms": 2500 },
+            { "Type": "uia", "Action": "dump" }
+          ]
+        },
+        {
+          "name": "09-wizard-step3-template",
+          "baseline": "07-wizard-step1-name",
+          "steps": [
+            { "Type": "uia", "Action": "select", "Ct": "ListItem", "NameLike": "3 profile 模板", "TimeoutMs": 5000 },
+            { "Type": "wait", "Ms": 2500 },
+            { "Type": "uia", "Action": "dump" }
+          ]
+        },
+        {
+          "name": "10-wizard-step4-isolation",
+          "baseline": "07-wizard-step1-name",
+          "steps": [
+            { "Type": "uia", "Action": "select", "Ct": "ListItem", "NameLike": "4 隔离策略", "TimeoutMs": 5000 },
+            { "Type": "wait", "Ms": 2500 },
+            { "Type": "uia", "Action": "dump" }
+          ]
+        }
+      ]
+    }
+  ]
+}

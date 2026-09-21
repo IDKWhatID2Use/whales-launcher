@@ -18,8 +18,11 @@ $ErrorActionPreference = 'Stop'
 # purely so a human reading the console sees readable text.
 try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false) } catch { }
 $testRoot = Split-Path -Parent $PSScriptRoot
-Import-Module (Join-Path $testRoot 'UiDriver.psm1') -Force
-Import-Module (Join-Path $testRoot 'UiCase.psm1') -Force
+# -DisableNameChecking: the driver API is fixed by the task spec (Find-ByAutomationId,
+# Toggle-Element, Resolve-UiRaw, ...) and a few of those nouns are not on the approved
+# verb list. Silencing the warning keeps the runner console readable.
+Import-Module (Join-Path $testRoot 'UiDriver.psm1') -Force -DisableNameChecking
+Import-Module (Join-Path $testRoot 'UiCase.psm1') -Force -DisableNameChecking
 
 $ctx = Read-UiContext -Path $ContextFile
 $L = $ctx.labels.shell

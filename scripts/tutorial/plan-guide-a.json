@@ -127,8 +127,23 @@
           "steps": [
             { "Type": "uia", "Action": "invoke", "Ct": "MenuItem", "Name": "编辑实例设置", "TimeoutMs": 5000 },
             { "Type": "wait", "Ms": 3000 },
-            { "Type": "uia", "Action": "focus", "Aid": "NameBox", "IncludeOffscreen": true, "TimeoutMs": 6000 },
+            { "Type": "uia", "Action": "select", "Ct": "ListItem", "Name": "设置", "TimeoutMs": 5000 },
+            { "Type": "wait", "Ms": 2500 },
+            { "Type": "move", "X": 1150, "Y": 700 },
+            { "Type": "wheel", "Delta": -1200 },
+            { "Type": "wait", "Ms": 800 },
+            { "Type": "wheel", "Delta": -1200 },
+            { "Type": "wait", "Ms": 800 },
+            { "Type": "wheel", "Delta": -1200 },
+            { "Type": "wait", "Ms": 800 },
+            { "Type": "wheel", "Delta": -1200 },
+            { "Type": "wait", "Ms": 800 },
+            { "Type": "wheel", "Delta": -1200 },
             { "Type": "wait", "Ms": 1500 },
+            { "Type": "uia", "Action": "invoke", "Ct": "Button", "Name": "实例信息", "TimeoutMs": 5000 },
+            { "Type": "wait", "Ms": 1500 },
+            { "Type": "wheel", "Delta": -600 },
+            { "Type": "wait", "Ms": 1200 },
             { "Type": "uia", "Action": "dump" }
           ]
         },
@@ -241,7 +256,7 @@
           "name": "23-node-runtime",
           "baseline": "18-global-settings",
           "steps": [
-            { "Type": "move", "X": 780, "Y": 400 },
+            { "Type": "move", "X": 1150, "Y": 600 },
             { "Type": "wheel", "Delta": -1200 },
             { "Type": "wait", "Ms": 900 },
             { "Type": "wheel", "Delta": -1200 },

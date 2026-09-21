@@ -12,7 +12,7 @@
 | 操作系统 | **Windows 10 / 11 x64** | Mica 材质与系统原生窗口按钮需要 Windows 11；Windows 10 会自动降级，不影响使用 |
 | Node.js（运行启动器） | **≥ 22** | 源码运行与构建用。本项目在 Node 26 上验证 |
 | Node.js（运行 dsh 实例） | **≥ 20，且必须是真正的 Node.js** | 见下一节的解释；可以是同一个 |
-| 磁盘 | 约 1 GB 起 | Electron 运行时约 200 MB，每个 dsh 引擎版本另有体积 |
+| 磁盘 | 约 1 GB 起 | .NET / WinUI 3 运行时与桥接层约 200 MB，每个 dsh 引擎版本另有体积 |
 
 一条命令自查：
 
@@ -27,9 +27,10 @@ npm -v
 
 这是新手最容易踩、也最难自己看懂的坑，先讲清楚。
 
-启动器是 Electron 应用，它内部**也有**一个 Node 运行时。很自然会想：直接用它跑 dsh 不就行了？
+启动器的界面是**原生 WinUI 3 应用**，但它把整套启动器逻辑交给一个 **Node 进程**（桥接层 `bridge/server.cjs`）
+执行 —— 也就是说本机**必须**有真正的 Node.js。很自然会想：随便找个运行时跑 dsh 不就行了？
 **不行。** dsh 依赖原生模块 `node-addon-require-builtin`，它按**运行时指纹白名单**匹配。
-Electron 内置 Node 的指纹（例如 Electron 41 的 `V8 14.6.202.26-electron.0`）不在白名单里，启动会直接失败：
+非标准运行时（例如 Electron 内置 Node，指纹形如 Electron 41 的 `V8 14.6.202.26-electron.0`）不在白名单里，启动会直接失败：
 
 ```
 Error: dsh: host preparation failed: node-addon-require-builtin unsupported:
@@ -39,7 +40,7 @@ Error: dsh: host preparation failed: node-addon-require-builtin unsupported:
 所以启动器会**主动去探测并调用真正的 Node.js**，解析顺序是：
 
 ```
-$WHALES_NODE_PATH  →  launcher.json 的 nodePath  →  启动器自身（源码模式）
+$WHALES_NODE_PATH  →  全局设置里的「Node 可执行文件路径」  →  启动器自身进程
                    →  系统 PATH  →  常见安装位置（nvm-windows / Volta / fnm / 官方安装包）
 ```
 
@@ -49,12 +50,13 @@ $WHALES_NODE_PATH  →  launcher.json 的 nodePath  →  启动器自身（源�
 
 ![Node 运行时](../assets/tutorial/23-node-runtime.png)
 
-*图 23：全局设置页尾的「Node 运行时」区块。正常状态是「探测结果：可用 · Node v24.11.0」，
-并列出实际使用的 `node.exe` 路径与来源（系统 PATH / 手动指定 / 常见安装位置）。*
+*图 23：全局设置的「Node 运行时」段。正常状态是「使用 `C:\Program Files\nodejs\node.exe`
+（Node v26.3.0，来源：启动器自身进程）」，下面列出实际使用的路径、版本、来源与候选清单。*
 
-**如果显示「未找到可用的 Node.js」**，有两个办法：
+**如果显示「没有找到可用的 Node 运行时」**，有两个办法：
 
-- 在「Node 可执行文件」输入框里手动填绝对路径（如 `C:\Program Files\nodejs\node.exe`）后点**保存**；
+- 在「Node 可执行文件路径」输入框里手动填绝对路径（如 `C:\Program Files\nodejs\node.exe`），
+  输入框失焦或按 Enter 即写入（本页是即时保存，没有「保存」按钮）；
 - 或设一个环境变量 `WHALES_NODE_PATH` 指向 `node.exe`，然后重启启动器。
 
 改动**立即生效** —— 之后启动实例与插件操作都会用它，不需要重启启动器。
@@ -101,10 +103,10 @@ npm install --cache "$PWD\.npm-cache"
 
 三个入口走的是**同一份实现**（[`scripts/launch.mjs`](../../scripts/launch.mjs)），做的事顺序一致：
 
-1. **环境自检** —— 确认 `node_modules/electron/dist/electron.exe` 到位；缺失时只用本机缓存离线修复，**绝不联网**；
-2. **按需构建** —— 产物齐全且比 `src/**` 新就**直接启动（双击即开）**；只有源码改过才跑 `npm run build`，
+1. **环境自检** —— 确认 Node.js 与构建产物到位；缺失时只用本机缓存离线修复，**绝不联网**；
+2. **按需构建** —— 产物齐全且比源码新就**直接启动（双击即开）**；只有源码改过才跑构建，
    且构建失败**不会**摧毁上一份可用产物；
-3. **启动并留证** —— Electron 的 stdout/stderr 直通控制台，同时写日志。
+3. **启动并留证** —— 应用与桥接层的 stdout/stderr 直通控制台，同时写日志。
 
 > **首次使用前请确认依赖已装好**（见上一节）。没装的话双击 `.bat` 会明确告诉你缺什么，
 > 而不是闪一下就没了。
@@ -132,7 +134,9 @@ npm run launch -- --dry-run # 启动链路自检：只做环境检查与构建�
 
 窗口打开后是**实例列表页**。如果你是全新安装，这里没有任何实例，会看到空态引导：
 
-> 空态引导会告诉你「实例 = 一个独立的 DSH_HOME」，并给出两个按钮：**新建实例** 与 **从实例包导入**。
+> 空态引导会告诉你「实例是一份独立的 dsh 运行环境，拥有自己的工作区、插件与设置」，
+> 并给出一个 **创建第一个实例** 按钮（当前 WinUI 3 版本还没有「从实例包导入」入口，见
+> [03 第 6 节](03-instances.md#6-实例包导出与导入)）。
 
 此时**还差一步才能真正干活**：必须先装一个 dsh 引擎版本。
 这正是下一章 [02 五分钟上手](02-quickstart.md) 的内容。
@@ -144,7 +148,7 @@ npm run launch -- --dry-run # 启动链路自检：只做环境检查与构建�
 | 现象 | 先看哪里 |
 |---|---|
 | 双击 `.bat` 没反应 / 闪退 | **`logs\launcher-summary.log`**（每次启动覆盖写，一屏给出结论） |
-| 窗口起来了但界面报错 | 窗口右下角 **运行日志抽屉**（标题栏 `>_` 图标，或 `Ctrl+L`） |
+| 窗口起来了但界面报错 | 标题栏右上角的 **运行日志** 按钮（或 `Ctrl+L`）打开运行日志抽屉 |
 | 实例启动失败 | 实例详情 → **「日志」页签**，以及 `$DSH_HOME/logs/startup-<时间戳>-<uuid>.log` |
 
 关于日志的三种文件各管什么，见 [05 设置·存档·日志](05-settings-saves-logs.md#日志)。

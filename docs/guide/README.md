@@ -14,26 +14,27 @@
 
 ## 关于本文的截图
 
-本文所有界面截图由 [`scripts/make-tutorial-shots.mjs`](../../scripts/make-tutorial-shots.mjs) **自动生成**，可随时重跑复现：
+本文所有界面截图都是 **WinUI 3 新界面的真实运行截图**，由
+[`scripts/tutorial/tour.ps1`](../../scripts/tutorial/tour.ps1) 在**隔离的临时演示 home** 上驱动应用
+（真实鼠标 / 键盘输入 + UI Automation）截取，可随时重跑复现：
 
 ```powershell
-npm run build
-node scripts/make-tutorial-shots.mjs          # 重新生成 docs/assets/tutorial/*.png
-node scripts/make-tutorial-shots.mjs --list   # 查看全部截图场景
+node scripts\tutorial\demo-home.mjs                    # 生成演示数据（临时 home，不动你的真实数据）
+node scripts\tutorial\verify-home.mjs                  # 校验后端读到的演示数据
+powershell -File scripts\tutorial\tour.ps1 -PlanFile scripts\tutorial\plan-guide-a.json
 ```
 
-截图取自渲染层的**内置演示数据模式**（未连接后端时自动启用），因此你会看到：
+截图用的是**临时演示实例**（`%TEMP%\whales-tutorial-home`），因此你会看到：
 
 | 你会看到 | 含义 |
 |---|---|
-| 左下角橙色「**演示数据**」徽标 | 当前界面没有真实后端，所有操作只作用于内存、不写磁盘 |
-| 列表顶部「当前为演示数据（未连接后端）」说明条 | 同上，附带一个「重新检测」按钮 |
-| 6 个示例实例、固定的版本号 | 示例数据刻意覆盖了 **6 种状态**：运行中 / 已停止 / 已崩溃 / 目录缺失 / 引擎未安装 / 记录异常 |
-| 右下角日志里的 `F:\WhalesLauncher\...` 路径 | 演示数据里的假路径，不代表你的机器 |
+| 实例名「文档工作台 / 资料检索 / 数据流水线 …」 | **演示数据**，不是你的实例；你的真实 `instances/` 全程只读 |
+| 路径里的 `F:\Temp\whales-tutorial-home\...` | 临时演示 home 的路径，不代表你的机器 |
+| 引擎体积 `2.1 KB` | 演示 home 里用的是**桩引擎**（几行脚本，不是 dsh），用来演示「运行中 / 已崩溃」等运行时状态 |
+| 6 个实例覆盖 6 种状态 | 刻意凑齐：运行中 / 已停止 / 已崩溃 / 目录缺失 / 引擎未安装 / 记录异常 |
 
-**你在真实使用中不会看到这些徽标和说明条** —— 正常启动（双击 `启动 WhalesLauncher.bat`）时后端就绪，
-界面直接呈现你的真实实例。之所以用演示数据出图，是因为它能把「平时很难同时凑齐」的各种状态一次性展示出来，
-且不泄漏任何本机数据。
+新旧图的对应关系、每张图的数据来源与像素取证、以及旧图在 git 历史里的归档位置，
+都记在 [`docs/assets/tutorial/CORRESPONDENCE.md`](../assets/tutorial/CORRESPONDENCE.md)。
 
 ---
 
@@ -59,7 +60,7 @@ node scripts/make-tutorial-shots.mjs --list   # 查看全部截图场景
 | [04 引擎与插件](04-engines-plugins.md) | 多版本引擎共存、安装与卸载、组合包开关、插件装卸 | `17` `11` |
 | [05 设置·存档·日志](05-settings-saves-logs.md) | `settings.yaml` 编辑器、启动参数、会话存档、实时日志 | `12` `13` `14` `06` |
 | [06 隔离与共享](06-isolation-sharing.md) | 四个隔离维度、junction 原理、共享冲突怎么处理 | `10` `13` |
-| [07 故障排查](07-troubleshooting.md) | 启动失败、端口占用、白屏、日志在哪、常见报错对照 | `16` `06` `23` |
+| [07 故障排查](07-troubleshooting.md) | 启动失败、端口占用、后端未就绪、日志在哪、常见报错对照 | `16` `06` `23` |
 
 ---
 
@@ -96,7 +97,7 @@ graph LR
 
 1. **`logs\launcher-summary.log`** —— 每次启动覆盖写，一屏给出时间、入口、构建决策、实际执行的命令、退出码结论。
    「双击没反应」时**最该先打开**的就是它。
-2. **界面右下角的运行日志抽屉**（标题栏 `>_` 图标，或 `Ctrl+L`）—— 实例的 stdout / stderr / 系统消息分色实时输出。
+2. **运行日志抽屉**（标题栏右上角的「运行日志」按钮，或 `Ctrl+L`）—— 实例的 stdout / stderr / 系统消息分色实时输出。
 3. **实例详情 →「日志」页签** —— 启动失败时 dsh 会把完整诊断写进 `$DSH_HOME/logs/startup-<时间戳>-<uuid>.log`。
 
 具体报错对照见 [07 故障排查](07-troubleshooting.md)。

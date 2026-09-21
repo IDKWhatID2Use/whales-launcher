@@ -1,0 +1,23 @@
+{
+  "schema": "whaleslauncher.tutorial.plan/1",
+  "description": "Empty-state capture for docs/assets/screenshot-empty.png (a home with no instances at all). The image is referenced by docs/video/promo-plan-v1.md, so the old-UI asset it points at is replaced by this new-UI capture.",
+  "exe": "F:\\WhalesLauncher\\desktop\\src\\WhalesLauncher.App\\bin\\Debug\\net10.0-windows10.0.26100.0\\win-x64\\WhalesLauncher.exe",
+  "home": "F:\\Temp\\whales-tutorial-home-empty",
+  "outDir": "F:\\WhalesLauncher\\docs\\assets",
+  "sessions": [
+    {
+      "id": "empty-state",
+      "route": "instances",
+      "waitMs": 11000,
+      "shots": [
+        {
+          "name": "screenshot-empty",
+          "steps": [
+            { "Type": "wait", "Ms": 1500 },
+            { "Type": "uia", "Action": "dump" }
+          ]
+        }
+      ]
+    }
+  ]
+}

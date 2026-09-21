@@ -144,6 +144,27 @@ public sealed partial class InstanceDetailPage : Page
 
         // 装载完成，放行标签事件（见 _tabsReady 的说明）
         _tabsReady = true;
+
+        // 再兜一次：SelectorBar 的 SelectionChanged 可能是**异步**派发的，即晚于上面这行
+        // 才到达。那时 _tabsReady 已为 true、_suppressTabEvents 已复位，事件会以为用户点了
+        // 页签，把 _currentTab 覆写回 BuildTabBar 在装载期设的默认项（「插件」）。
+        // 实测症状：深链 detail/<id>/settings 进入时，标题栏、页签选中态、面包屑三处都
+        // 显示「插件」，内容区也是插件页 —— 带页签的深链失效。
+        //
+        // 用 DispatcherQueue 的 Low 优先级重排：它排在所有已入队的工作之后，因此那些
+        // 异步派发的标签事件一定已经落地，这次收敛才是有效的（Task.Yield 只让出一次，
+        // 实测不足以保证这一点）。
+        var dispatcher = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+        if (dispatcher is not null)
+        {
+            dispatcher.TryEnqueue(
+                Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
+                UpdateTabSelection);
+        }
+        else
+        {
+            UpdateTabSelection();
+        }
     }
 
     /* ------------------------------------------------------------------ *

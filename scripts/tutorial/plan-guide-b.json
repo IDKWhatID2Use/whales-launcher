@@ -1,0 +1,61 @@
+{
+  "schema": "whaleslauncher.tutorial.plan/1",
+  "description": "Guide screenshots, batch B: runtime states (running / crashed). Both are produced by the real launch flow against the isolated demo home; the engine is a stub (see scripts/tutorial/demo-home.mjs). UIA Invoke is used for the launch button because it is the variant verified to work on this button.",
+  "exe": "F:\\WhalesLauncher\\desktop\\src\\WhalesLauncher.App\\bin\\Debug\\net10.0-windows10.0.26100.0\\win-x64\\WhalesLauncher.exe",
+  "home": "F:\\Temp\\whales-tutorial-home",
+  "outDir": "F:\\WhalesLauncher\\docs\\assets\\tutorial",
+  "sessions": [
+    {
+      "id": "state-running",
+      "route": "instances",
+      "waitMs": 11000,
+      "shots": [
+        {
+          "name": "_start-first",
+          "scratch": true,
+          "steps": [
+            { "Type": "uia", "Action": "invoke", "Ct": "Button", "Name": "启动", "Index": 0, "TimeoutMs": 5000 },
+            { "Type": "wait", "Ms": 5000 },
+            { "Type": "uia", "Action": "dump" }
+          ]
+        },
+        {
+          "name": "15-running-detail",
+          "steps": [
+            { "Type": "uia", "Action": "invoke", "Ct": "Button", "Name": "查看实例详情", "Index": 0, "TimeoutMs": 5000 },
+            { "Type": "wait", "Ms": 3500 },
+            { "Type": "uia", "Action": "dump" }
+          ]
+        },
+        {
+          "name": "06-log-drawer",
+          "steps": [
+            { "Type": "uia", "Action": "invoke", "Ct": "Button", "Name": "返回实例列表", "TimeoutMs": 5000 },
+            { "Type": "wait", "Ms": 2500 },
+            { "Type": "key", "Chord": "Ctrl+L" },
+            { "Type": "wait", "Ms": 3000 },
+            { "Type": "uia", "Action": "dump" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "state-crash",
+      "route": "instances",
+      "waitMs": 11000,
+      "shots": [
+        {
+          "name": "16-crashed-card",
+          "steps": [
+            { "Type": "uia", "Action": "invoke", "Ct": "Button", "Name": "启动", "Index": 2, "TimeoutMs": 5000 },
+            { "Type": "wait", "Ms": 6000 },
+            { "Type": "uia", "Action": "dump" },
+            { "Type": "uia", "Action": "invoke", "Ct": "Button", "Name": "刷新实例列表", "TimeoutMs": 5000 },
+            { "Type": "wait", "Ms": 4000 },
+            { "Type": "uia", "Action": "dump" }
+          ]
+        }
+      ]
+    }
+  ]
+}

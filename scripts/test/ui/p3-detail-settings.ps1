@@ -12,8 +12,11 @@ param(
 $ErrorActionPreference = 'Stop'
 try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false) } catch { }
 $testRoot = Split-Path -Parent $PSScriptRoot
-Import-Module (Join-Path $testRoot 'UiDriver.psm1') -Force
-Import-Module (Join-Path $testRoot 'UiCase.psm1') -Force
+# -DisableNameChecking: the driver API is fixed by the task spec (Find-ByAutomationId,
+# Toggle-Element, Resolve-UiRaw, ...) and a few of those nouns are not on the approved
+# verb list. Silencing the warning keeps the runner console readable.
+Import-Module (Join-Path $testRoot 'UiDriver.psm1') -Force -DisableNameChecking
+Import-Module (Join-Path $testRoot 'UiCase.psm1') -Force -DisableNameChecking
 
 $ctx = Read-UiContext -Path $ContextFile
 $L = $ctx.labels.p3
@@ -31,7 +34,8 @@ try {
 
     # ---------------------------------------------------------------- P3-01
     # The YAML editor is the YamlEditorView user control; its TextBox carries
-    # AutomationProperties.Name = 'settings.yaml 内容' and x:Name = 'Editor'.
+    # AutomationProperties.Name is the localized "settings.yaml contents" label
+    # (delivered through the JSON context as $L.editorName); x:Name = 'Editor'.
     $editor = Find-ByAutomationId -Id $L.editorAid -Scope $root -Exact -TimeoutMs 15000 -AllowMissing
     $editorValue = ''
     $editorOk = $false

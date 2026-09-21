@@ -451,8 +451,55 @@ public sealed partial class MainWindow : Window
 
     private void RebuildRail()
     {
-        _rail.Rebuild(AppServices.IsReady ? AppServices.State.Instances : null, InstanceFilter.Text);
+        // 重建集合期间必须抑制选中事件。
+        //
+        // 原因（实测定位）：NavigationView 在 ItemsSource 被替换后会**自动选中第一项**，
+        // 于是 OnNavSelectionChanged 收到一条"用户选了第一个实例"的事件，并按硬编码的
+        // DetailTabs.Plugins 导航过去。这条自动导航会**覆盖**刚刚由深链建立的详情路由 ——
+        // 表现为 WHALES_SMOKE_ROUTE=detail/<id>/settings 进入后，标题栏、页签与面包屑
+        // 全部显示「插件」。诊断日志（两次 OnNavigatedTo，间隔 67ms）确认了这一点：
+        // 第一次是深链的 settings，第二次就是这个自动选中。
+        var previous = _syncingSelection;
+        _syncingSelection = true;
+        try
+        {
+            _rail.Rebuild(AppServices.IsReady ? AppServices.State.Instances : null, InstanceFilter.Text);
+        }
+        finally
+        {
+            _syncingSelection = previous;
+        }
+
+        // 重建会丢掉选中态，显式恢复一次（同时保证恢复动作本身不触发导航）。
         SyncRailSelection();
+
+        // 再排一次到 UI 队列末尾。
+        //
+        // 为什么上面那次还不够：NavigationView 的"自动选中第一项"发生在 ItemsSource
+        // 替换**之后**，可能晚于本次同步。实测证据（tabdiag）：首个深链
+        // detail/<id>/settings 仍有第二次导航到 /plugins（间隔 91ms），而后来的
+        // saves / logs 只有一次 —— 差别就在于首个深链正好撞上这个窗口。
+        // 排到 Low 优先级可确保自动选中已经落地，再收敛一次即可；
+        // 没有自动选中时这一步是幂等的。
+        var dispatcher = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+        if (dispatcher is not null)
+        {
+            dispatcher.TryEnqueue(
+                Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
+                () =>
+                {
+                    var restore = _syncingSelection;
+                    _syncingSelection = true;
+                    try
+                    {
+                        SyncRailSelection();
+                    }
+                    finally
+                    {
+                        _syncingSelection = restore;
+                    }
+                });
+        }
     }
 
     private void OnInstanceFilterChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args) =>

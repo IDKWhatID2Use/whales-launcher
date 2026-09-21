@@ -12,8 +12,11 @@ param(
 $ErrorActionPreference = 'Stop'
 try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false) } catch { }
 $testRoot = Split-Path -Parent $PSScriptRoot
-Import-Module (Join-Path $testRoot 'UiDriver.psm1') -Force
-Import-Module (Join-Path $testRoot 'UiCase.psm1') -Force
+# -DisableNameChecking: the driver API is fixed by the task spec (Find-ByAutomationId,
+# Toggle-Element, Resolve-UiRaw, ...) and a few of those nouns are not on the approved
+# verb list. Silencing the warning keeps the runner console readable.
+Import-Module (Join-Path $testRoot 'UiDriver.psm1') -Force -DisableNameChecking
+Import-Module (Join-Path $testRoot 'UiCase.psm1') -Force -DisableNameChecking
 
 $ctx = Read-UiContext -Path $ContextFile
 $L = $ctx.labels.p7
@@ -25,26 +28,38 @@ $failure = ''
 $instancesDir = Join-Path $ctx.home 'instances'
 
 try {
-    # The wizard is reached by CLICKING the page-header "new instance" button
-    # instead of the WHALES_SMOKE_ROUTE=create deep link. That deep link runs
-    # during the MainWindow constructor, before the backend is attached, and
-    # WizardPage.OnNavigatedTo touches AppServices.State without an IsReady
-    # guard (unlike InstancesPage) - the exception is swallowed by
-    # NavigateSmokeRoute's try/catch and the page tree is never built. See the
-    # PAGES comment in run-ui-tests.mjs and the report's defect section.
+    # Primary path: the WHALES_SMOKE_ROUTE=create deep link. This used to be
+    # broken (the wizard page tree was never built because the navigation ran
+    # before the backend was attached and WizardPage.OnNavigatedTo lacked the
+    # AppServices.IsReady guard that InstancesPage has); P7-08 keeps an eye on
+    # it. If it regresses, the case falls back to clicking the real
+    # "new instance" entry so the rest of the page assertions still run.
     $app = Start-WhalesApp -Root $ctx.home -Route $ctx.launchRoute -Exe $ctx.exe -LogDir $ctx.logDir
     Add-UiDiagnostic -Case $case -Text "pid=$($app.Pid) hwnd=$($app.Hwnd) launchRoute=$($ctx.launchRoute)"
     $root = Get-UiRoot -Hwnd $app.Hwnd
 
-    $entry = Find-ByAutomationId -Id 'CreateButton' -Scope $root -Exact -TimeoutMs 25000 -AllowMissing
-    if ($null -eq $entry) { throw "entry point missing: no 'CreateButton' on the instances page" }
-    Invoke-Element -Element $entry
-    $entered = Wait-Until -TimeoutMs 25000 -Message 'create wizard step bar' -Condition {
+    $deepLinkOk = Wait-Until -TimeoutMs 25000 -Message 'wizard via deep link' -Condition {
         $null -ne (Find-ByAutomationId -Id 'Step1Item' -Scope (Get-UiRoot -Hwnd $app.Hwnd) -Exact -TimeoutMs 800 -AllowMissing)
     }
-    if (-not $entered) { throw 'the create wizard did not open after clicking the header button' }
+    $reachedVia = 'deep link'
+    if (-not $deepLinkOk) {
+        Add-UiDiagnostic -Case $case -Text 'deep link create did not build the wizard; falling back to the header button'
+        $entry = Find-ByAutomationId -Id 'CreateButton' -Scope $root -Exact -TimeoutMs 25000 -AllowMissing
+        if ($null -eq $entry) { throw "entry point missing: neither the create deep link nor a 'CreateButton' on the instances page" }
+        Invoke-Element -Element $entry
+        $entered = Wait-Until -TimeoutMs 25000 -Message 'wizard via header button' -Condition {
+            $null -ne (Find-ByAutomationId -Id 'Step1Item' -Scope (Get-UiRoot -Hwnd $app.Hwnd) -Exact -TimeoutMs 800 -AllowMissing)
+        }
+        if (-not $entered) { throw 'the create wizard did not open via the deep link or the header button' }
+        $reachedVia = 'header button'
+    }
     $root = Get-UiRoot -Hwnd $app.Hwnd
-    Add-UiDiagnostic -Case $case -Text 'create wizard opened via the page-header button'
+    Add-UiDiagnostic -Case $case -Text "create wizard reached via $reachedVia"
+
+    # ---------------------------------------------------------------- P7-08
+    # Regression guard for the WHALES_SMOKE_ROUTE=create deep link itself.
+    Add-UiCheck -Case $case -Id 'P7-08' -Title $C.'P7-08' -Kind 'behavior' -Ok $deepLinkOk `
+        -Detail "launchRoute='$($ctx.launchRoute)' reachedVia=$reachedVia"
 
     # ---------------------------------------------------------------- P7-01
     $stepAids = @('Step1Item', 'Step2Item', 'Step3Item', 'Step4Item')
@@ -128,7 +143,6 @@ try {
     Add-UiCheck -Case $case -Id 'P7-04' -Title $C.'P7-04' -Kind 'behavior' -Ok $validOk -Detail $validDetail
 
     # ---------------------------------------------------------------- P7-02
-    # Behavior: submitting with an EMPTY name must not create anything. Verified
     # against the filesystem (the instances directory of the temp home), not
     # against a toast that may or may not be rendered.
     [void](Set-ElementValue -Element $nameBox -Value '')

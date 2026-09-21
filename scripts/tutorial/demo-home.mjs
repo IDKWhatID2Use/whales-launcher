@@ -23,7 +23,12 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
-const home = path.join(os.tmpdir(), 'whales-tutorial-home');
+/**
+ * 默认 home（有演示实例）。`--empty` 时改为一个**空 home**：一个实例都没有，
+ * 用来截「还没有实例」的引导空态（docs/assets/screenshot-empty.png）。
+ */
+const emptyMode = process.argv.includes('--empty');
+const home = path.join(os.tmpdir(), emptyMode ? 'whales-tutorial-home-empty' : 'whales-tutorial-home');
 
 /* ---------------------------------------------------------------- 安全断言 */
 
@@ -63,28 +68,36 @@ const STUB_ENGINE = `#!/usr/bin/env node
 /*
  * WhalesLauncher 教程截图专用【桩引擎】—— 不是 @deepseek-ai/dsh。
  * 它只做两件事：① 打印一行形如 http://127.0.0.1:<port>/ 的地址让启动器完成
- * 界面地址探测；② 常驻不退（--demo-crash 时立刻以退出码 1 结束）。
+ * 界面地址探测；② 常驻不退（profile 名为 crash-demo 时立刻以退出码 1 结束）。
  * 之所以用桩：教程配图需要「运行中 / 已崩溃」这类真实运行时状态，而任务约束
  * 明确禁止启动真实 dsh 引擎。
+ *
+ * 为什么按 profile 名而不是按实例的 appArgs 判断崩溃：启动器传给引擎的命令行
+ * 始终带 \`--profile <名>\`，而实例自定义参数不一定会被带上（界面发起启动时
+ * 传的是空数组，core 会用请求里的空数组覆盖实例自身的 appArgs）。
  */
 const argv = process.argv.slice(2);
 const portIndex = argv.indexOf('--port');
 const port = portIndex >= 0 ? Number(argv[portIndex + 1]) : 3080;
+const profileIndex = argv.indexOf('--profile');
+const profile = profileIndex >= 0 ? argv[profileIndex + 1] : '';
 
-if (argv.includes('--demo-crash')) {
-  process.stderr.write('[demo-engine] 桩引擎按 --demo-crash 立即退出（演示崩溃态）\\n');
+if (profile === 'crash-demo') {
+  process.stderr.write('[demo-engine] 桩引擎按 profile=crash-demo 立即退出（演示崩溃态）\\n');
   process.exit(1);
 }
 
 process.stdout.write('[demo-engine] tutorial stub engine starting\\n');
+process.stdout.write('[demo-engine] profile=' + profile + '\\n');
 process.stdout.write('[demo-engine] DSH_HOME=' + (process.env.DSH_HOME || '(unset)') + '\\n');
 process.stdout.write('[demo-engine] 监听地址 http://127.0.0.1:' + port + '/\\n');
 process.stdout.write('[demo-engine] 这是一张教程截图的演示进程，不是真实 dsh 会话\\n');
 
-const timer = setInterval(() => {
+// 心跳定时器必须保持引用（不能 unref）：unref 后事件循环为空，进程会立刻
+// 以退出码 0 结束，启动器如实显示「已停止」，截图里就看不到「运行中」。
+setInterval(() => {
   process.stdout.write('[demo-engine] heartbeat ' + new Date().toISOString() + '\\n');
 }, 20000);
-timer.unref?.();
 
 process.on('SIGTERM', () => process.exit(0));
 process.on('SIGINT', () => process.exit(0));
@@ -178,6 +191,35 @@ async function seedInstance(spec) {
 async function main() {
   if (existsSync(home)) await rm(home, { recursive: true, force: true });
   await mkdir(home, { recursive: true });
+
+  if (emptyMode) {
+    // 空 home：只有合法配置，没有任何实例与引擎 → 实例列表页显示引导空态
+    await writeJson(path.join(home, 'launcher.json'), {
+      schemaVersion: 1,
+      primaryHome: path.join(home, 'home-base'),
+      theme: 'light',
+      lastInstanceId: null,
+      confirmOnDelete: true,
+      engineRegistry: 'https://registry.npmjs.org',
+      nodePath: null,
+    });
+    await mkdir(path.join(home, 'instances'), { recursive: true });
+    await writeText(
+      path.join(home, 'TUTORIAL-DEMO-HOME.md'),
+      [
+        '# 教程截图演示 home（空态，隔离临时目录）',
+        '',
+        `由 \`scripts/tutorial/demo-home.mjs --empty\` 生成，路径：\`${home}\``,
+        '',
+        '这个 home **没有任何实例**，专门用来截「还没有实例」的引导空态',
+        '（`docs/assets/screenshot-empty.png`）。真实用户数据在仓库根的 `instances/`、',
+        '`engines/`，本目录的生成与使用过程从不读写它们。',
+        '',
+      ].join('\n'),
+    );
+    console.log(JSON.stringify({ ok: true, mode: 'empty', home, engines: [], instances: [] }, null, 2));
+    return;
+  }
 
   const engines = [];
   engines.push(await seedEngine('0.1.6-alpha.2'));
@@ -282,8 +324,6 @@ async function main() {
       profile: 'crash-demo',
       template: 'web',
       bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app'],
-      // 只有这一个实例带 --demo-crash：启动即异常退出，产生真实的 crashed 运行时状态
-      appArgs: ['--demo-crash'],
       launchCount: 4,
       lastLaunchedAt: iso(60 * 8),
       createdAt: iso(60 * 24 * 2),

@@ -1,8 +1,8 @@
 {
   "schema": "whaleslauncher.ui-test-report/1",
-  "generatedAt": "2026-09-21T11:43:09.440Z",
-  "startedAt": "2026-09-21T11:39:59.606Z",
-  "durationMs": 189835,
+  "generatedAt": "2026-09-21T12:22:30.371Z",
+  "startedAt": "2026-09-21T12:20:19.431Z",
+  "durationMs": 130940,
   "framework": {
     "driver": "PowerShell 5.1 + 内置 UI Automation（UIAutomationClient / UIAutomationTypes）",
     "capture": "scripts/audit/capture-core.ps1 的 [WinAuditCore]（PrintWindow PW_RENDERFULLCONTENT + ImageStats）",
@@ -14,7 +14,7 @@
     "bridge": "F:\\WhalesLauncher\\dist\\bridge\\server.cjs",
     "node": "v26.3.0",
     "platform": "win32 10.0.26200",
-    "tmpHome": "F:\\Temp\\whales-ui-test-vGV4tR"
+    "tmpHome": "F:\\Temp\\whales-ui-test-ht6XaR"
   },
   "expectations": {
     "instanceCount": 3,
@@ -33,8 +33,8 @@
       "0.0.1-uitest.1",
       "0.0.1-uitest"
     ],
-    "noEngineHomeDir": "F:\\Temp\\whales-ui-test-IHAh33",
-    "emptyHomeDir": "F:\\Temp\\whales-ui-test-YVIN3n",
+    "noEngineHomeDir": "F:\\Temp\\whales-ui-test-UmVS6k",
+    "emptyHomeDir": "F:\\Temp\\whales-ui-test-UaHPG2",
     "firstInstanceName": "UI Alpha",
     "firstInstanceDir": "ui-alpha",
     "firstInstanceId": "ui-fixture-0001",
@@ -45,8 +45,8 @@
     "fixtureEngineVersion": "0.0.1-uitest"
   },
   "totals": {
-    "total": 67,
-    "passed": 66,
+    "total": 69,
+    "passed": 68,
     "failed": 0,
     "unverifiable": 1,
     "errored": 0
@@ -56,8 +56,8 @@
       "page": "shell",
       "title": "外壳（标题栏 / 左栏 / 应用菜单 / 日志抽屉 / 主题）",
       "route": "instances",
-      "startedAt": "2026-09-21T11:40:00.1041438Z",
-      "durationMs": 10033,
+      "startedAt": "2026-09-21T12:20:19.8891796Z",
+      "durationMs": 9846,
       "error": null,
       "infrastructure": false,
       "total": 9,
@@ -130,7 +130,7 @@
         }
       ],
       "diagnostics": [
-        "pid=45920 hwnd=4984598 class=WinUIDesktopWin32WindowClass route=instances"
+        "pid=25720 hwnd=8064498 class=WinUIDesktopWin32WindowClass route=instances"
       ],
       "exitCode": 0,
       "timedOut": false,
@@ -140,8 +140,8 @@
       "page": "p1-instances",
       "title": "P1 实例列表",
       "route": "instances",
-      "startedAt": "2026-09-21T11:40:10.1403514Z",
-      "durationMs": 20771,
+      "startedAt": "2026-09-21T12:20:29.7417747Z",
+      "durationMs": 17996,
       "error": null,
       "infrastructure": false,
       "total": 10,
@@ -221,7 +221,7 @@
         }
       ],
       "diagnostics": [
-        "pid=43768 hwnd=2952394 route=instances"
+        "pid=21436 hwnd=10292698 route=instances"
       ],
       "exitCode": 0,
       "timedOut": false,
@@ -231,8 +231,8 @@
       "page": "p2-detail-plugins",
       "title": "P2 实例详情 · 插件",
       "route": "detail/first/plugins",
-      "startedAt": "2026-09-21T11:40:30.9069381Z",
-      "durationMs": 10786,
+      "startedAt": "2026-09-21T12:20:47.7392017Z",
+      "durationMs": 10409,
       "error": null,
       "infrastructure": false,
       "total": 8,
@@ -298,7 +298,7 @@
         }
       ],
       "diagnostics": [
-        "pid=40084 hwnd=3476348 route=detail/first/plugins"
+        "pid=36196 hwnd=11930970 route=detail/first/plugins"
       ],
       "exitCode": 0,
       "timedOut": false,
@@ -308,8 +308,8 @@
       "page": "p3-detail-settings",
       "title": "P3 实例详情 · 设置",
       "route": "detail/first/settings",
-      "startedAt": "2026-09-21T11:40:41.6891761Z",
-      "durationMs": 5925,
+      "startedAt": "2026-09-21T12:20:58.1683946Z",
+      "durationMs": 5466,
       "error": null,
       "infrastructure": false,
       "total": 7,
@@ -368,7 +368,7 @@
         }
       ],
       "diagnostics": [
-        "pid=30088 hwnd=2100554 route=detail/first/settings"
+        "pid=40480 hwnd=16255966 route=detail/first/settings"
       ],
       "exitCode": 0,
       "timedOut": false,
@@ -378,8 +378,8 @@
       "page": "p4-detail-saves",
       "title": "P4 实例详情 · 存档",
       "route": "detail/first/saves",
-      "startedAt": "2026-09-21T11:40:47.6059646Z",
-      "durationMs": 19676,
+      "startedAt": "2026-09-21T12:21:03.6185534Z",
+      "durationMs": 19413,
       "error": null,
       "infrastructure": false,
       "total": 6,
@@ -431,7 +431,7 @@
         }
       ],
       "diagnostics": [
-        "pid=46400 hwnd=14027252 route=detail/first/saves"
+        "pid=39532 hwnd=14945524 route=detail/first/saves"
       ],
       "exitCode": 0,
       "timedOut": false,
@@ -441,8 +441,8 @@
       "page": "p5-detail-logs",
       "title": "P5 实例详情 · 日志",
       "route": "detail/first/logs",
-      "startedAt": "2026-09-21T11:41:07.2899850Z",
-      "durationMs": 15089,
+      "startedAt": "2026-09-21T12:21:23.0256043Z",
+      "durationMs": 14766,
       "error": null,
       "infrastructure": false,
       "total": 6,
@@ -494,7 +494,7 @@
         }
       ],
       "diagnostics": [
-        "pid=49052 hwnd=4459348 route=detail/first/logs"
+        "pid=47412 hwnd=12193114 route=detail/first/logs"
       ],
       "exitCode": 0,
       "timedOut": false,
@@ -504,8 +504,8 @@
       "page": "p6-engines",
       "title": "P6 引擎版本管理",
       "route": "engines",
-      "startedAt": "2026-09-21T11:41:22.3804854Z",
-      "durationMs": 30120,
+      "startedAt": "2026-09-21T12:21:37.7934685Z",
+      "durationMs": 30208,
       "error": null,
       "infrastructure": false,
       "total": 7,
@@ -564,7 +564,7 @@
         }
       ],
       "diagnostics": [
-        "pid=40756 hwnd=10489314 route=engines"
+        "pid=36360 hwnd=11209556 route=engines"
       ],
       "exitCode": 0,
       "timedOut": false,
@@ -574,15 +574,22 @@
       "page": "p7-wizard",
       "title": "P7 创建实例向导",
       "route": "create",
-      "startedAt": "2026-09-21T11:41:52.5092438Z",
-      "durationMs": 13920,
+      "startedAt": "2026-09-21T12:22:08.0084461Z",
+      "durationMs": 13029,
       "error": null,
       "infrastructure": false,
-      "total": 7,
-      "passed": 7,
+      "total": 8,
+      "passed": 8,
       "failed": 0,
       "unverifiable": 0,
       "checks": [
+        {
+          "Id": "P7-08",
+          "Title": "深链 create 直接落到创建向导（不靠点击）",
+          "Kind": "behavior",
+          "Status": "pass",
+          "Detail": "launchRoute='create' reachedVia=deep link"
+        },
         {
           "Id": "P7-01",
           "Title": "4 步步骤条存在且文案正确",
@@ -634,8 +641,8 @@
         }
       ],
       "diagnostics": [
-        "pid=40384 hwnd=10554850 launchRoute=instances",
-        "create wizard opened via the page-header button"
+        "pid=48796 hwnd=11275092 launchRoute=create",
+        "create wizard reached via deep link"
       ],
       "exitCode": 0,
       "timedOut": false,
@@ -645,15 +652,22 @@
       "page": "p8-settings",
       "title": "P8 全局设置",
       "route": "settings",
-      "startedAt": "2026-09-21T11:42:59.1727663Z",
-      "durationMs": 10647,
+      "startedAt": "2026-09-21T12:22:21.0310900Z",
+      "durationMs": 9709,
       "error": null,
       "infrastructure": false,
-      "total": 7,
-      "passed": 7,
+      "total": 8,
+      "passed": 8,
       "failed": 0,
       "unverifiable": 0,
       "checks": [
+        {
+          "Id": "P8-08",
+          "Title": "深链 settings 直接落到全局设置（不靠点击）",
+          "Kind": "behavior",
+          "Status": "pass",
+          "Detail": "launchRoute='settings' reachedVia=deep link"
+        },
         {
           "Id": "P8-01",
           "Title": "主题两项（深色/浅色）存在",
@@ -687,7 +701,7 @@
           "Title": "存储位置路径与 registry 输入框可读",
           "Kind": "existence",
           "Status": "pass",
-          "Detail": "PrimaryHomeBox='C:\\Users\\jcgfw\\.dsh' ; RootDirBox='F:\\Temp\\whales-ui-test-vGV4tR' ; RegistryBox='https://registry.npmjs.org'"
+          "Detail": "PrimaryHomeBox='C:\\Users\\jcgfw\\.dsh' ; RootDirBox='F:\\Temp\\whales-ui-test-ht6XaR' ; RegistryBox='https://registry.npmjs.org'"
         },
         {
           "Id": "P8-06",
@@ -705,12 +719,12 @@
         }
       ],
       "diagnostics": [
-        "pid=8688 hwnd=7146886 launchRoute=instances",
-        "global settings opened via the navigation rail"
+        "pid=44320 hwnd=16583646 launchRoute=settings",
+        "global settings reached via deep link"
       ],
       "exitCode": 0,
       "timedOut": false,
-      "attempts": 2
+      "attempts": 1
     }
   ],
   "exitCode": 0

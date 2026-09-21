@@ -623,9 +623,10 @@ function Find-ByAutomationId {
 }
 
 function Find-ByName {
-    <# Find by UIA Name. Default matching is a case-insensitive SUBSTRING test
-       (UIA names carry suffixes such as '切换深浅色主题（深色）'); pass -Exact for
-       an ordinal comparison. #>
+    <# Find by UIA Name. Default matching is a case-insensitive SUBSTRING test,
+       because UIA names carry suffixes (the theme button is named
+       "switch light/dark theme (dark)", not just "switch light/dark theme").
+       Pass -Exact for an ordinal comparison. #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true)][AllowEmptyString()][string]$Name,

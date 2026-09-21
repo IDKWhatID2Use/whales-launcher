@@ -943,6 +943,17 @@ foreach ($session in $plan.sessions) {
                     if (-not $btn) { $btn = 'left' }
                     $stepRecord.detail = [WinAuditCore]::Click($hwnd, $x, $y, $btn)
                 }
+                'move' {
+                    # Move the physical cursor WITHOUT clicking. Needed before a
+                    # wheel step: the wheel event goes to whatever is under the
+                    # cursor, so scrolling a page means parking the cursor there.
+                    $x = [int](Get-StepField -Step $step -Name 'X')
+                    $y = [int](Get-StepField -Step $step -Name 'Y')
+                    [void][WinAuditCore]::SetForeground($hwnd)
+                    Start-Sleep -Milliseconds 250
+                    $stepRecord.detail = [WinAuditCore]::MoveTo($hwnd, $x, $y)
+                    Start-Sleep -Milliseconds 250
+                }
                 'wheel' {
                     $d = -120
                     $v = Get-StepField -Step $step -Name 'Delta'

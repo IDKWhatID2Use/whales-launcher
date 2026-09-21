@@ -12,8 +12,11 @@ param(
 $ErrorActionPreference = 'Stop'
 try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false) } catch { }
 $testRoot = Split-Path -Parent $PSScriptRoot
-Import-Module (Join-Path $testRoot 'UiDriver.psm1') -Force
-Import-Module (Join-Path $testRoot 'UiCase.psm1') -Force
+# -DisableNameChecking: the driver API is fixed by the task spec (Find-ByAutomationId,
+# Toggle-Element, Resolve-UiRaw, ...) and a few of those nouns are not on the approved
+# verb list. Silencing the warning keeps the runner console readable.
+Import-Module (Join-Path $testRoot 'UiDriver.psm1') -Force -DisableNameChecking
+Import-Module (Join-Path $testRoot 'UiCase.psm1') -Force -DisableNameChecking
 
 $ctx = Read-UiContext -Path $ContextFile
 $L = $ctx.labels.p8
@@ -24,39 +27,51 @@ $app = $null
 $failure = ''
 
 try {
-    # Reached by CLICKING the navigation rail's "global settings" entry instead
-    # of the WHALES_SMOKE_ROUTE=settings deep link: that deep link runs during
-    # the MainWindow constructor, before the backend is attached, and
-    # SettingsPage.OnNavigatedTo touches AppServices.State without an IsReady
-    # guard (unlike InstancesPage) - the exception is swallowed by
-    # NavigateSmokeRoute's try/catch and the page tree is never built. See the
-    # PAGES comment in run-ui-tests.mjs and the report's defect section.
+    # Primary path: the WHALES_SMOKE_ROUTE=settings deep link. This used to be
+    # broken (the settings page tree was never built because the navigation ran
+    # before the backend was attached and SettingsPage.OnNavigatedTo lacked the
+    # AppServices.IsReady guard that InstancesPage has); P8-08 keeps an eye on
+    # it. If it regresses, the case falls back to activating the navigation
+    # rail's "global settings" entry so the rest of the assertions still run.
     $app = Start-WhalesApp -Root $ctx.home -Route $ctx.launchRoute -Exe $ctx.exe -LogDir $ctx.logDir
     Add-UiDiagnostic -Case $case -Text "pid=$($app.Pid) hwnd=$($app.Hwnd) launchRoute=$($ctx.launchRoute)"
     $root = Get-UiRoot -Hwnd $app.Hwnd
 
-    # The rail rows surface as ListItems whose UIA Name is the CLR type name
-    # ('WhalesLauncher.Shell.RailEntry'), so the entry is located by the text of
-    # its children instead of by name.
-    $railEntry = $null
-    $railDeadline = [DateTime]::UtcNow.AddSeconds(25)
-    while ($null -eq $railEntry -and [DateTime]::UtcNow -lt $railDeadline) {
-        $footer = Find-ByAutomationId -Id 'FooterMenuItemsHost' -Scope (Get-UiRoot -Hwnd $app.Hwnd) -Exact -TimeoutMs 1500 -AllowMissing
-        if ($footer) {
-            foreach ($row in @(Get-UiChildrenOfType -Element $footer -ControlType 'ListItem')) {
-                if ((@(Get-UiTexts -Scope $row.Element)) -contains $ctx.labels.shell.railSettings) { $railEntry = $row; break }
-            }
-        }
-        if ($null -eq $railEntry) { Start-Sleep -Milliseconds 700 }
-    }
-    if ($null -eq $railEntry) { throw "entry point missing: no '$($ctx.labels.shell.railSettings)' row in the navigation rail footer" }
-    Select-Element -Element $railEntry.Element
-    $entered = Wait-Until -TimeoutMs 25000 -Message 'settings theme radios' -Condition {
+    $deepLinkOk = Wait-Until -TimeoutMs 25000 -Message 'settings via deep link' -Condition {
         $null -ne (Find-ByAutomationId -Id $L.themeRadiosAid -Scope (Get-UiRoot -Hwnd $app.Hwnd) -Exact -TimeoutMs 800 -AllowMissing)
     }
-    if (-not $entered) { throw 'the global settings page did not open after activating the rail entry' }
+    $reachedVia = 'deep link'
+    if (-not $deepLinkOk) {
+        Add-UiDiagnostic -Case $case -Text 'deep link settings did not build the page; falling back to the navigation rail'
+        # The rail rows surface as ListItems whose UIA Name is the CLR type name
+        # ('WhalesLauncher.Shell.RailEntry'), so the entry is located by the text
+        # of its children instead of by name.
+        $railEntry = $null
+        $railDeadline = [DateTime]::UtcNow.AddSeconds(25)
+        while ($null -eq $railEntry -and [DateTime]::UtcNow -lt $railDeadline) {
+            $footer = Find-ByAutomationId -Id 'FooterMenuItemsHost' -Scope (Get-UiRoot -Hwnd $app.Hwnd) -Exact -TimeoutMs 1500 -AllowMissing
+            if ($footer) {
+                foreach ($row in @(Get-UiChildrenOfType -Element $footer -ControlType 'ListItem')) {
+                    if ((@(Get-UiTexts -Scope $row.Element)) -contains $ctx.labels.shell.railSettings) { $railEntry = $row; break }
+                }
+            }
+            if ($null -eq $railEntry) { Start-Sleep -Milliseconds 700 }
+        }
+        if ($null -eq $railEntry) { throw "entry point missing: neither the settings deep link nor a '$($ctx.labels.shell.railSettings)' rail row" }
+        Select-Element -Element $railEntry.Element
+        $entered = Wait-Until -TimeoutMs 25000 -Message 'settings via rail' -Condition {
+            $null -ne (Find-ByAutomationId -Id $L.themeRadiosAid -Scope (Get-UiRoot -Hwnd $app.Hwnd) -Exact -TimeoutMs 800 -AllowMissing)
+        }
+        if (-not $entered) { throw 'the global settings page did not open via the deep link or the rail entry' }
+        $reachedVia = 'navigation rail'
+    }
     $root = Get-UiRoot -Hwnd $app.Hwnd
-    Add-UiDiagnostic -Case $case -Text 'global settings opened via the navigation rail'
+    Add-UiDiagnostic -Case $case -Text "global settings reached via $reachedVia"
+
+    # ---------------------------------------------------------------- P8-08
+    # Regression guard for the WHALES_SMOKE_ROUTE=settings deep link itself.
+    Add-UiCheck -Case $case -Id 'P8-08' -Title $C.'P8-08' -Kind 'behavior' -Ok $deepLinkOk `
+        -Detail "launchRoute='$($ctx.launchRoute)' reachedVia=$reachedVia"
 
     # ---------------------------------------------------------------- P8-01
     $radios = Find-ByAutomationId -Id $L.themeRadiosAid -Scope $root -Exact -TimeoutMs 15000 -AllowMissing

@@ -31,6 +31,14 @@ import { fileURLToPath } from 'node:url';
 import { createFixtureHome, assertHomeIsolated, FIXTURE_ENGINE_VERSION, NO_MATCH_QUERY } from './lib/fixtures.mjs';
 import { openBridge } from './lib/bridge.mjs';
 import { LABELS, CHECKS } from './lib/labels.mjs';
+import {
+  FRAMEWORK_RATIONALE,
+  ISOLATION_NOTES,
+  UIA_SPIKE_NOTES,
+  KNOWN_DEFECTS,
+  ENVIRONMENT_HAZARDS,
+  FOLLOW_UPS,
+} from './lib/report-notes.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, '..', '..');
@@ -56,17 +64,13 @@ const BRIDGE_ENTRY = path.join(repoRoot, 'dist', 'bridge', 'server.cjs');
  *  - route      = 人类可读的「这一页怎么到达」
  *  - launchRoute= 传给 WHALES_SMOKE_ROUTE 的深链值
  *
- * ⚠ 为什么 P7 / P8 的 launchRoute 是 'instances' 而不是 'create' / 'settings'：
- *   深链导航在 MainWindow 构造期执行（后端尚未装配）。InstancesPage.OnNavigatedTo 有
- *   `AppServices.IsReady` 守卫（见该文件 L99-L103 注释），WizardPage / SettingsPage 没有 ——
- *   它们第一条语句就是 `AppServices.State.XxxChanged += ...`，在后端未装配时抛
- *   InvalidOperationException；该异常被 MainWindow.NavigateSmokeRoute 的 try/catch 静默吞掉，
- *   于是 Frame 的 Navigated 事件已派发（标题栏副标题变成了目标页），但目标页的控件树从未
- *   真正建立 —— 深链 create / settings 拿到的是一个空壳。
- *   实测：`WHALES_SMOKE_ROUTE=create` 时 UIA 里没有任何 Step1Item / NameBox / IconGrid；
- *   改为点击页头「新建实例」按钮后，Step1Item..Step4Item / NameBox / IconGrid / ColorGrid
- *   全部出现且 20 秒稳定（见 docs/audit/ui-test-report.md 的「发现的真实缺陷」）。
- *   走真实用户路径既是更贴近产品的覆盖，也让 P7/P8 不依赖这个缺陷。
+ * ⚠ P7 / P8 的深链（create / settings）曾经失效：那条路径在 MainWindow 构造期执行，
+ *   当时后端尚未装配，而 WizardPage / SettingsPage 的 OnNavigatedTo 没有
+ *   AppServices.IsReady 守卫（InstancesPage 有），异常被 NavigateSmokeRoute 的
+ *   try/catch 静默吞掉 —— 标题栏副标题切到了目标页，内容区却从未建立。
+ *   该缺陷已由并行的源码修复解决（ApplySmokeRoute 现在等 IsInitialized 再导航）。
+ *   本套用例因此**直接使用深链**，并各自留一条断言（P7-08 / P8-08）专门盯住它；
+ *   万一深链再次回归，用例会退回到"点击真实入口"继续跑完，但那条断言会红。
  */
 const PAGES = [
   {
@@ -132,16 +136,16 @@ const PAGES = [
     id: 'p7-wizard',
     script: 'p7-wizard.ps1',
     route: 'create',
-    launchRoute: 'instances',
-    navigation: '点击页头「新建实例」按钮（深链 create 有缺陷，见文件头说明）',
+    launchRoute: 'create',
+    navigation: '深链 create（失败时退回点击页头「新建实例」按钮）',
     title: 'P7 创建实例向导',
   },
   {
     id: 'p8-settings',
     script: 'p8-settings.ps1',
     route: 'settings',
-    launchRoute: 'instances',
-    navigation: '点击左栏「全局设置」入口（深链 settings 有缺陷，见文件头说明）',
+    launchRoute: 'settings',
+    navigation: '深链 settings（失败时退回点击左栏「全局设置」入口）',
     title: 'P8 全局设置',
   },
 ];
@@ -533,13 +537,25 @@ function renderMarkdown(report) {
   lines.push('');
   lines.push('复跑命令：`npm run test:ui`（单页：`node scripts/test/run-ui-tests.mjs --page p1-instances`）');
   lines.push('');
-  lines.push('## 2. 逐页结果');
+  lines.push('## 2. 框架选型与依据');
   lines.push('');
-  lines.push('| 页面 | 路由 | 通过/总数 | 失败 | 不可判定 | 耗时 |');
-  lines.push('|---|---|---|---|---|---|');
+  lines.push(...FRAMEWORK_RATIONALE);
+  lines.push('');
+  lines.push('## 3. 隔离与可复跑性');
+  lines.push('');
+  lines.push(...ISOLATION_NOTES);
+  lines.push('');
+  lines.push('## 4. UIA spike 结论：哪些控件可枚举 / 可交互');
+  lines.push('');
+  lines.push(...UIA_SPIKE_NOTES);
+  lines.push('');
+  lines.push('## 5. 逐页结果');
+  lines.push('');
+  lines.push('| 页面 | 到达方式 | 通过/总数 | 失败 | 不可判定 | 尝试次数 | 耗时 |');
+  lines.push('|---|---|---|---|---|---|---|');
   for (const page of report.pages) {
     lines.push(
-      `| ${page.title} | \`${page.route}\` | ${page.passed}/${page.total} | ${page.failed} | ${page.unverifiable} | ${page.durationMs}ms |`,
+      `| ${page.title} | ${page.navigation ?? ''} | ${page.passed}/${page.total} | ${page.failed} | ${page.unverifiable} | ${page.attempts ?? 1} | ${page.durationMs}ms |`,
     );
   }
   lines.push('');
@@ -547,7 +563,7 @@ function renderMarkdown(report) {
   for (const page of report.pages) {
     lines.push(`### ${page.title}`);
     lines.push('');
-    lines.push(`路由 \`${page.route}\`　用例 \`scripts/test/ui/${page.page}.ps1\``);
+    lines.push(`到达方式：${page.navigation ?? page.route}　用例：\`scripts/test/ui/${page.page}.ps1\``);
     lines.push('');
     if (page.error) {
       lines.push('**用例级错误**：');
@@ -577,6 +593,71 @@ function renderMarkdown(report) {
       lines.push('');
     }
   }
+
+  /* ---- unverifiable 清单 ---- */
+  lines.push('## 6. unverifiable 清单（不计入通过）');
+  lines.push('');
+  const unverifiables = [];
+  for (const page of report.pages) {
+    for (const check of page.checks ?? []) {
+      if (check.status === 'unverifiable') unverifiables.push({ page: page.title, ...check });
+    }
+  }
+  if (unverifiables.length === 0) {
+    lines.push('本次运行没有 unverifiable 项。');
+  } else {
+    lines.push('| 页面 | 断言 | 原因 |');
+    lines.push('|---|---|---|');
+    for (const item of unverifiables) {
+      lines.push(`| ${item.page} | ${item.id} ${item.title} | ${String(item.detail ?? '').replace(/\|/g, '\\|')} |`);
+    }
+  }
+  lines.push('');
+
+  /* ---- 缺陷 ---- */
+  lines.push('## 7. 发现的真实缺陷');
+  lines.push('');
+  for (const defect of KNOWN_DEFECTS) {
+    lines.push(`### ${defect.id}　${defect.title}`);
+    lines.push('');
+    lines.push(`- 严重度：${defect.severity}`);
+    lines.push(`- 状态：${defect.status}`);
+    lines.push('- 证据：');
+    for (const item of defect.evidence) lines.push(`  - ${item}`);
+    lines.push(`- 对本套用例的影响：${defect.impactOnSuite}`);
+    lines.push('');
+  }
+
+  /* ---- 环境风险 ---- */
+  lines.push('## 8. 环境风险与已实现的对策');
+  lines.push('');
+  lines.push(...ENVIRONMENT_HAZARDS);
+  lines.push('');
+
+  /* ---- 每页尝试次数 ---- */
+  const retried = report.pages.filter((page) => (page.attempts ?? 1) > 1);
+  if (retried.length > 0) {
+    lines.push('本次运行发生的重试：');
+    lines.push('');
+    for (const page of retried) {
+      lines.push(`- ${page.title}：尝试 ${page.attempts} 次（前 ${page.attempts - 1} 次为基础设施失败）`);
+    }
+    lines.push('');
+  }
+
+  /* ---- 后续 ---- */
+  lines.push('## 9. 建议后续');
+  lines.push('');
+  lines.push(...FOLLOW_UPS);
+  lines.push('');
+
+  /* ---- 环境快照 ---- */
+  lines.push('## 10. 环境快照');
+  lines.push('');
+  lines.push('```json');
+  lines.push(JSON.stringify({ environment: report.environment, expectations: report.expectations, framework: report.framework }, null, 2));
+  lines.push('```');
+  lines.push('');
   return `${lines.join('\n')}\n`;
 }
 
