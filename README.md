@@ -211,18 +211,32 @@ npm run build:app    # 只打应用：desktop/build-app.ps1（带命名 Mutex �
 
 | 入口 | 行为 | 适合谁 |
 |---|---|---|
-| **`启动 WhalesLauncher.bat`** | 双击即启动（应用已构建时）；未构建会给出明确的构建提示。支持 `--build` / `--check` / `--wait` | 日常使用、排查问题 |
+| **`WhalesLauncher\WhalesLauncher.exe`** | **直接双击运行的应用本体**（自包含发布，无需先装 .NET 运行时） | 只想用它 |
+| **`启动 WhalesLauncher.bat`** | 双击即启动（应用已构建时）；未构建会给出明确的构建提示。支持 `--build` / `--check` / `--wait` | 日常使用、排查问题、看诊断输出 |
 | **`WhalesLauncher.vbs`** | 无控制台窗口的静默启动；启动失败会弹窗并把原因与日志路径一起给出 | 由快捷方式调用 |
 | **`创建桌面快捷方式.bat`** | 在**桌面**与**开始菜单**各建一个快捷方式（指向上面那个 .vbs） | 装一次，之后从开始菜单搜索启动 |
 
-三个入口共享同一份实现 [`scripts/launch-app.ps1`](scripts/launch-app.ps1)：定位最新的
+后三个入口共享同一份实现 [`scripts/launch-app.ps1`](scripts/launch-app.ps1)：定位最新的
 `WhalesLauncher.exe` → 启动 → 退出。`--check` 可以只看它会启动哪个 exe（不改动任何东西）：
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\launch-app.ps1 -Check
 ```
 
-> 三个入口都**必须在代码页 936 下安全**（`.bat` / `.vbs` / `.ps1` 一律纯 ASCII，中文只出现在
+> **为什么根目录还有个 `WhalesLauncher\` 目录**：仓库根是**源码树**，构建产物按 .NET 约定
+> 落在 `desktop\src\WhalesLauncher.App\bin\...` 与 `artifacts\`。为了让"拿到就想双击运行"
+> 这一步不用先翻目录，根目录的 `WhalesLauncher\` 是一个**目录联接（junction）**指向
+> `artifacts\WhalesLauncher-win-x64`，因此它零复制、不占额外磁盘，也不入库
+> （见 `.gitignore` 的 `/WhalesLauncher/`）。别的机器 clone 后没有这个链接，重建即可：
+>
+> ```powershell
+> npm run build
+> cmd /c mklink /J WhalesLauncher artifacts\WhalesLauncher-win-x64
+> ```
+>
+> 若链接失效（目标被 `npm run clean` 清掉），双击 `.bat` 仍可用 —— 它会给出明确的构建提示。
+
+> 三个脚本入口都**必须在代码页 936 下安全**（`.bat` / `.vbs` / `.ps1` 一律纯 ASCII，中文只出现在
 > 文件名里）。原因写在每个文件头：cmd 与 WSH 按活动代码页读文件，UTF-8 中文会被撕成
 > 包含 `'` `"` `\` 的乱码字节并**静默破坏命令解析** —— 本项目在这上面实际踩过三次。
 

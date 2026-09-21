@@ -66,6 +66,12 @@
 /desktop/**/*.msix
 /artifacts/
 
+# 根目录的「点开即用」入口：指向 artifacts/WhalesLauncher-win-x64 的目录联接。
+# 它是生成物（231 MB），且 Windows 的 junction 本身也不适合入库 —— 别的机器上
+# 只会得到一个悬空链接。用 `mklink /J WhalesLauncher artifacts\WhalesLauncher-win-x64`
+# 重建即可，README「直接启动」一节有说明。
+/WhalesLauncher/
+
 # ------------------------------------------------------------ 日志与临时文件
 *.log
 *.tmp
