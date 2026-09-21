@@ -1,8 +1,0 @@
-{
-  "global-fonts.ts": "9b8dca7bf3dc8b7faf4e2628b4eeda574bae91b3",
-  "global-strokeWidths.ts": "6cc868a3551b1b3b87f64b3df4fe9e56edf98ad4",
-  "alias-lightColor.ts": "01c7e85750c1c7edd71a861be0310f976f0386d6",
-  "alias-darkColor.ts": "a4749ae3bb43362c134aabdf5ba3b54040b50ff2",
-  "global-colors.ts": "e8744d569ba821d013ab3f4cec0c319c16c6da50",
-  "global-typographyStyles.ts": "8c8ffdd77077cb90856ec934a77c37b70eb8119b"
-}

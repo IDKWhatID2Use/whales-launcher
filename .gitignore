@@ -86,3 +86,10 @@
 Thumbs.db
 Desktop.ini
 $RECYCLE.BIN/
+
+# -------------------------------------------------- 旧前端快照与取证素材（不入库）
+# 拆除旧 Electron 前端前产生的快照与 Fluent 令牌取证素材，内容属已废弃前端。
+# 仍需查阅时用 git 历史：git show 8690343:.backup/pre-fluent2-20260921-112817/<路径>
+# 本机若保留了副本，在 .probe/legacy-snapshots/ 下。
+/.backup/
+/.fluent-b64/

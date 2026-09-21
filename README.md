@@ -211,8 +211,8 @@ npm run build:app    # 只打应用：desktop/build-app.ps1（带命名 Mutex �
 
 | 入口 | 行为 | 适合谁 |
 |---|---|---|
-| **`WhalesLauncher\WhalesLauncher.exe`** | **直接双击运行的应用本体**（自包含发布，无需先装 .NET 运行时） | 只想用它 |
-| **`启动 WhalesLauncher.bat`** | 双击即启动（应用已构建时）；未构建会给出明确的构建提示。支持 `--build` / `--check` / `--wait` | 日常使用、排查问题、看诊断输出 |
+| **下载 [最新 Release](https://github.com/IDKWhatID2Use/whales-launcher/releases/latest) 的 zip** | **成品应用**：解压后双击包内 `WhalesLauncher.exe` 即可运行，**免装 .NET 运行时** | 只想用它（推荐） |
+| **`启动 WhalesLauncher.bat`** | 从源码树启动（应用已构建时）；未构建会给出明确的构建提示。支持 `--build` / `--check` / `--wait` | 开发、排查问题、看诊断输出 |
 | **`WhalesLauncher.vbs`** | 无控制台窗口的静默启动；启动失败会弹窗并把原因与日志路径一起给出 | 由快捷方式调用 |
 | **`创建桌面快捷方式.bat`** | 在**桌面**与**开始菜单**各建一个快捷方式（指向上面那个 .vbs） | 装一次，之后从开始菜单搜索启动 |
 
@@ -223,18 +223,22 @@ npm run build:app    # 只打应用：desktop/build-app.ps1（带命名 Mutex �
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\launch-app.ps1 -Check
 ```
 
-> **为什么根目录还有个 `WhalesLauncher\` 目录**：仓库根是**源码树**，构建产物按 .NET 约定
-> 落在 `desktop\src\WhalesLauncher.App\bin\...` 与 `artifacts\`。为了让"拿到就想双击运行"
-> 这一步不用先翻目录，根目录的 `WhalesLauncher\` 是一个**目录联接（junction）**指向
-> `artifacts\WhalesLauncher-win-x64`，因此它零复制、不占额外磁盘，也不入库
-> （见 `.gitignore` 的 `/WhalesLauncher/`）。别的机器 clone 后没有这个链接，重建即可：
+> **为什么仓库根目录没有 exe**：仓库是**源码树**，构建产物按 .NET 约定落在
+> `desktop\src\WhalesLauncher.App\bin\...`。可交付的成品**只通过
+> [GitHub Release](https://github.com/IDKWhatID2Use/whales-launcher/releases) 分发**
+> （自包含、免装 .NET），这样仓库保持精简、克隆也不慢。
+>
+> 想自己产出一份可分发的包：
 >
 > ```powershell
 > npm run build
-> cmd /c mklink /J WhalesLauncher artifacts\WhalesLauncher-win-x64
+> powershell -NoProfile -ExecutionPolicy Bypass -File desktop\publish-release.ps1
 > ```
 >
-> 若链接失效（目标被 `npm run clean` 清掉），双击 `.bat` 仍可用 —— 它会给出明确的构建提示。
+> `desktop/publish-release.ps1` 会把自包含产物整理成
+> `artifacts/WhalesLauncher-<版本>-win-x64.zip`（含 `WhalesLauncher.exe`、中文说明与双击入口）。
+> 该脚本同时记录了**为什么不能用单文件发布**（`PublishSingleFile` 与 unpackaged 的
+> `EnableMsixTooling=false` 互斥，Windows App SDK 会直接报错）。
 
 > 三个脚本入口都**必须在代码页 936 下安全**（`.bat` / `.vbs` / `.ps1` 一律纯 ASCII，中文只出现在
 > 文件名里）。原因写在每个文件头：cmd 与 WSH 按活动代码页读文件，UTF-8 中文会被撕成
