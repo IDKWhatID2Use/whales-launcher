@@ -152,18 +152,24 @@ function Get-UiDescendants {
        turned an AutomationElementCollection into one element and broke
        .Item() calls during the spike).
 
-       TWO strategies, on purpose:
-         1. The provider-side FindAll(Descendants) is used when it yields
-            anything. From the window root it is both cheap and *more complete*
-            than a control-view walk: it also reaches the content of flyouts and
-            menus, which live in a Microsoft.UI.Content.PopupWindowSiteBridge
-            child rather than in the normal visual subtree.
-         2. Inside an inner element WinUI's provider returns NOTHING for
-            FindAll - verified by direct experiment (MenuItemsHost reported 0
-            descendants while its ListItems were clearly present in a
-            control-view walk). So sub-scopes fall back to an explicit
-            TreeWalker.ControlViewWalker breadth-first walk, the same traversal
-            the existing audit tooling uses.
+       TWO sources, MERGED on purpose:
+         1. The provider-side FindAll(Descendants) - cheap, and the only way to
+            reach the content of flyouts and menus, which live in a
+            Microsoft.UI.Content.PopupWindowSiteBridge child rather than in the
+            normal visual subtree.
+         2. An explicit TreeWalker breadth-first walk (ControlViewWalker /
+            RawViewWalker) - the same traversal the audit tooling uses.
+
+       Why merge instead of the older "use FindAll whenever it yields anything":
+       that fast path returned whatever shape the provider happened to hand
+       back, and this app's provider is demonstrably inconsistent about
+       sub-scopes - the very same fallback exists because MenuItemsHost reports
+       ZERO descendants for FindAll while its ListItems are plainly there in a
+       control-view walk (comment above the walk). A lookup whose completeness
+       depends on which of those two shapes shows up on a given frame is a
+       non-deterministic lookup, and rail lookups (SH-02 / SH-11) are exactly
+       the ones that suffer. Merging makes the candidate set a superset of both
+       traversals, at the cost of one extra walk per lookup.
        #>
     [CmdletBinding()]
     param(
@@ -181,19 +187,32 @@ function Get-UiDescendants {
     $raw = Resolve-UiRaw -Value $Scope
     $list = New-Object System.Collections.Generic.List[object]
 
+    # Dedupe by runtime id so the merge cannot hand the same control to callers
+    # twice - several assertions compare text sets, and duplicates would make
+    # those comparisons lie.
+    $seen = New-Object 'System.Collections.Generic.HashSet[string]'
+
     if ($View -eq 'Control') {
-        $found = $raw.FindAll(
-            [System.Windows.Automation.TreeScope]::Descendants,
-            [System.Windows.Automation.Condition]::TrueCondition)
-        if ($found.Count -gt 0) {
-            for ($i = 0; $i -lt $found.Count -and $i -lt $Max; $i++) {
-                $list.Add($found.Item($i))
-            }
-            return $list.ToArray()
+        # FindAll can fail TRANSIENTLY with E_FAIL ("无法识别的错误") while the
+        # window is repainting - measured right after a RequestedTheme flip, where
+        # it killed an entire case (SH-07). A failed provider call must degrade
+        # into the walk below instead of killing the case.
+        $found = $null
+        try {
+            $found = $raw.FindAll(
+                [System.Windows.Automation.TreeScope]::Descendants,
+                [System.Windows.Automation.Condition]::TrueCondition)
+        } catch {
+            $found = $null
         }
-        # Inside an inner element WinUI's provider returns NOTHING for FindAll -
-        # verified by direct experiment (MenuItemsHost reported 0 descendants
-        # while its ListItems were clearly present). Fall through to a walk.
+        if ($null -ne $found) {
+            for ($i = 0; $i -lt $found.Count -and $list.Count -lt $Max; $i++) {
+                $el = $found.Item($i)
+                $list.Add($el)
+                $key = Get-UiRuntimeIdKey -Element $el
+                if ($key) { [void]$seen.Add($key) }
+            }
+        }
         $walk = [System.Windows.Automation.TreeWalker]::ControlViewWalker
     } else {
         $walk = [System.Windows.Automation.TreeWalker]::RawViewWalker
@@ -203,17 +222,36 @@ function Get-UiDescendants {
     $queue.Enqueue($raw)
     while ($queue.Count -gt 0 -and $list.Count -lt $Max) {
         $current = $queue.Dequeue()
-        $child = $walk.GetFirstChild($current)
+
+        # Same transient-E_FAIL story as above: a walk step can throw while the
+        # tree is being rebuilt (the element went stale). Skip that node and keep
+        # walking - a partial tree beats a dead case.
+        try { $child = $walk.GetFirstChild($current) } catch { $child = $null }
+
         $guard = 0
         while ($null -ne $child -and $guard -lt 500) {
             $guard++
-            $list.Add($child)
-            $queue.Enqueue($child)
+            $key = Get-UiRuntimeIdKey -Element $child
+            $isNew = $true
+            if ($key) { $isNew = $seen.Add($key) }
+            if ($isNew) {
+                $list.Add($child)
+                $queue.Enqueue($child)
+            }
             if ($list.Count -ge $Max) { break }
-            $child = $walk.GetNextSibling($child)
+            try { $child = $walk.GetNextSibling($child) } catch { $child = $null }
         }
     }
     return $list.ToArray()
+}
+
+function Get-UiRuntimeIdKey {
+    <# Stable identity for an AutomationElement within one traversal. Returns ''
+       when the provider cannot supply a runtime id (a stale element, typically);
+       callers then treat the element as new instead of dropping it. #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory = $true)]$Element)
+    try { return ([string]::Join(',', $Element.GetRuntimeId())) } catch { return '' }
 }
 
 function Get-UiInfo {

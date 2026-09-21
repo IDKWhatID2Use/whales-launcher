@@ -194,10 +194,21 @@ async function countFiles(dir) {
 
 function runCaseScript(scriptPath, contextFile, outJson) {
   return new Promise((resolve) => {
+    // Hand each case a CLEAN routing/root environment. Start-WhalesApp sets
+    // WHALES_SMOKE_ROUTE / WHALES_LAUNCHER_ROOT for the app it launches, so any
+    // value inherited from the runner's own environment is pure noise. One
+    // observed run had the app sitting on the About page (failing SH-08) with no
+    // click involved in the case, which is exactly the symptom of a leaked route
+    // value; deleting the keys here removes that whole class of flakiness.
+    const env = { ...process.env };
+    delete env.WHALES_SMOKE_ROUTE;
+    delete env.WHALES_LAUNCHER_ROOT;
+    delete env.WHALES_ROOT;
+
     const child = spawn(
       'powershell.exe',
       ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', scriptPath, '-ContextFile', contextFile, '-OutJson', outJson],
-      { cwd: repoRoot, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] },
+      { cwd: repoRoot, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env },
     );
 
     let stdout = '';

@@ -111,6 +111,14 @@ desktop/
 2. 若属跨页面复用（≥2 个页面要用），归 `Controls/`；仅单页用则放该页 `Page.Resources` 或 `Views/Detail/` 内；
 3. 在回复里登记「新增了哪个控件、给谁用」，Lead 会检查是否与他人重复造轮子。
 
+**现有控件**（新增时请在此表登记，避免重复造轮子）：
+
+| 控件 | 用途 | 谁用 |
+|---|---|---|
+| `Controls/PageHeader` | 页面统一的标题 + 描述 + 右侧操作区 | 全部页面 |
+| `Controls/ToastHost` | 应用内轻提示的宿主（§9.10.2） | 外壳 |
+| `Controls/PreflightReportView` | 展示环境自检报告（逐项状态走"色 + 图标 + 文字"三通道） | 首次启动的报告对话框（`Shell/PreflightPresenter`）与「全局设置 → 环境自检」分区 |
+
 ## 8. 代码风格
 
 | 项 | 规定 |

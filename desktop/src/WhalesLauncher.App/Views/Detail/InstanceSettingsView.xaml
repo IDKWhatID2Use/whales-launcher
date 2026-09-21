@@ -23,7 +23,7 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <muxc:BreadcrumbBar x:Name="Crumb" Grid.Row="0" />
+        <muxc:BreadcrumbBar x:Name="Crumb" Grid.Row="0" ItemClicked="OnCrumbItemClicked" />
 
         <Grid Grid.Row="1" ColumnSpacing="16">
             <Grid.ColumnDefinitions>

@@ -433,7 +433,7 @@ export interface LauncherConfig {
  * ------------------------------------------------------------------ */
 
 /** Node 运行时的来源（顺序即解析优先级）。 */
-export type NodeRuntimeSource = 'env' | 'config' | 'current' | 'path' | 'common';
+export type NodeRuntimeSource = 'env' | 'config' | 'current' | 'path' | 'portable' | 'common';
 
 /** 单个候选运行时的探测结论。 */
 export interface NodeRuntimeCandidate {
@@ -468,6 +468,92 @@ export interface NodeRuntimeReport {
   source: NodeRuntimeSource | null;
   /** 全部候选与结论。 */
   candidates: NodeRuntimeCandidate[];
+  /** 面向用户的一句话结论。 */
+  message: string;
+}
+
+/* ------------------------------------------------------------------ *
+ * 环境与依赖自检（preflight）
+ *
+ * 首次启动与「全局设置 → 环境自检」共用同一份实现（`src/core/preflight.ts`）：
+ * 缺目录就建、缺引擎就装，装不了的把原因与下一步如实写进 `advice`。
+ * 报告刻意**不含"环境正常"这类断言**，只说检查了什么、修了什么、还剩什么。
+ * ------------------------------------------------------------------ */
+
+/** 单项检查的结论。 */
+export type PreflightStatus =
+  /** 通过。 */
+  | 'ok'
+  /** 原本缺失/异常，本次已自动修复。 */
+  | 'fixed'
+  /** 缺失且（按当前选项）没有自动修复。 */
+  | 'missing'
+  /** 检查本身失败（例如枚举引擎时目录不可读）。 */
+  | 'failed'
+  /** 按选项跳过（例：未开启联网探测）。 */
+  | 'skipped';
+
+/** 单项检查结果。 */
+export interface PreflightCheck {
+  /** 稳定标识：`runtime-dirs` / `config` / `node` / `npm` / `engine` / `network`。 */
+  id: string;
+  /** 中文标题（界面直接显示）。 */
+  title: string;
+  status: PreflightStatus;
+  /** 一句话结论。 */
+  summary: string;
+  /** 细节（路径、版本、候选清单等，可多行）；无细节为 null。 */
+  detail: string | null;
+  /** 需要用户处理时给出的下一步建议；否则为 null。 */
+  advice: string | null;
+  /** 是否由本次自检自动完成修复。 */
+  autoFixed: boolean;
+  /** 自动修复产出的版本号（目前仅引擎自动安装会填）；无则为 null。 */
+  fixedValue: string | null;
+}
+
+/**
+ * 自检选项。
+ *
+ * 默认值是**保守的**：只有 `autoFix`（建目录这类纯本地动作）默认开启，
+ * 联网类动作（装引擎、探测 registry）必须由调用方显式打开 ——
+ * 界面上「环境自检」按钮不该顺手产生几分钟的下载（视觉规范 §9.9：本页避免网络副作用）。
+ */
+export interface PreflightOptions {
+  /** 允许自动修复（创建数据目录等）。默认 `true`。 */
+  autoFix?: boolean;
+  /** 允许自动安装缺失的 dsh 引擎（联网，首次可能数分钟）。默认 `false`。 */
+  installEngine?: boolean;
+  /** 是否探测 npm registry 连通性。默认 `false`。 */
+  checkNetwork?: boolean;
+  /** 忽略 Node 运行时探测缓存重新探测。默认 `false`。 */
+  refreshRuntime?: boolean;
+  /** 覆盖 npm registry（不传则读全局配置，再退回内置默认值）。 */
+  registry?: string;
+}
+
+/** 一次完整自检的结果。 */
+export interface PreflightReport {
+  /** 是否为首次自检（此前没有自检状态文件）。 */
+  firstRun: boolean;
+  /** 开始时刻（ISO 8601）。 */
+  startedAt: string;
+  /** 结束时刻（ISO 8601）。 */
+  finishedAt: string;
+  /** 总耗时（毫秒）。 */
+  elapsedMs: number;
+  /** 被检查的启动器根目录。 */
+  root: string;
+  /** 依次执行的检查项（顺序稳定，界面按此顺序渲染）。 */
+  checks: PreflightCheck[];
+  /** 是否**没有遗留问题**（已自动修复的算通过）。 */
+  ok: boolean;
+  /** 本次自动修复的项数。 */
+  fixedCount: number;
+  /** 遗留问题项数（`missing` + `failed`）。 */
+  problemCount: number;
+  /** 本次自动安装的引擎版本；没装则为 null。 */
+  installedEngineVersion: string | null;
   /** 面向用户的一句话结论。 */
   message: string;
 }
@@ -555,6 +641,14 @@ export const CH = {
     setConfig: 'launcher:setConfig',
     /** 探测运行 dsh 所需的 Node 运行时（`refresh=true` 时重新探测，忽略缓存）。 */
     detectNode: 'launcher:detectNode',
+    /**
+     * 环境与依赖自检（首次启动与设置页共用）。
+     *
+     * 参数：`[options?: PreflightOptions]`；返回 {@link PreflightReport}。
+     * 只在 `options.installEngine === true` 时才会联网安装引擎，因此该调用可能长达数分钟，
+     * 调用方必须给足超时（C# 侧见 `SettingsPage` 与启动编排处的超时设置）。
+     */
+    preflight: 'launcher:preflight',
   },
   instance: {
     list: 'instance:list',
@@ -626,6 +720,8 @@ export interface WhalesApi {
     setConfig(patch: Partial<LauncherConfig>): Promise<Result<LauncherConfig>>;
     /** 探测运行 dsh 的 Node 运行时（`refresh` 为 true 时忽略缓存重新探测）。 */
     detectNode(refresh?: boolean): Promise<Result<NodeRuntimeReport>>;
+    /** 环境与依赖自检；`installEngine` 为 true 时会联网自动安装缺失的引擎（可能数分钟）。 */
+    preflight(options?: PreflightOptions): Promise<Result<PreflightReport>>;
   };
   instance: {
     list(): Promise<Result<InstanceSummary[]>>;
@@ -814,6 +910,18 @@ export interface CoreApi {
   removeEngine(root: string, version: string): Promise<void>;
   /** 引擎 bin.js 绝对路径；未安装返回 null。 */
   resolveEngineBin(root: string, version: string): string | null;
+
+  /* preflight */
+  /**
+   * 环境与依赖自检（首次启动与设置页共用）。
+   *
+   * **永不抛错**：任何单项失败都落成该项的 `failed` 并带中文原因；同一根目录上并发调用
+   * 会复用同一次执行（单飞）。
+   * @param root 启动器根目录。
+   * @param options 自检选项（默认只做自动修复，不联网）。
+   * @param onLog 长耗时步骤（引擎安装）的实时日志下沉。
+   */
+  runPreflight(root: string, options?: PreflightOptions, onLog?: LogSink): Promise<PreflightReport>;
 
   /* profile / settings */
   readProfileInventory(root: string, meta: InstanceMeta): Promise<PluginInventory>;

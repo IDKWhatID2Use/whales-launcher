@@ -39,6 +39,13 @@ public static class RouteKeys
     public const string Engines = "engines";
     public const string Create = "create";
     public const string Settings = "settings";
+
+    /// <summary>
+    /// 「关于」。左栏底部固定项指向它（交接文档 §2.2 方案 A），因此它是一条**真实路由**
+    /// 而不是一个弹框动作 —— 左栏项被点中后要有选中态，只有可导航的页面才说得通。
+    /// 同时它也是 <c>WHALES_SMOKE_ROUTE=about</c> 的取值。
+    /// </summary>
+    public const string About = "about";
 }
 
 /// <summary>
@@ -102,6 +109,7 @@ public sealed class NavigationService
         RouteKeys.Engines => typeof(Views.EnginesPage),
         RouteKeys.Create => typeof(Views.WizardPage),
         RouteKeys.Settings => typeof(Views.SettingsPage),
+        RouteKeys.About => typeof(Views.AboutPage),
         _ => null,
     };
 }

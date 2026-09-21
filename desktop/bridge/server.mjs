@@ -15,6 +15,9 @@
  * launcher:getConfig              ipc.ts L79            （配置校验见 config.ts L163-218）
  * launcher:setConfig              ipc.ts L81-87         （config.ts L163-218 逐条搬运）
  * launcher:detectNode             ipc.ts L95-96
+ * launcher:preflight              —— **本轮新增**（旧 Electron 版没有环境自检）：
+ *                                 参数校验 validate.mjs `parsePreflightOptions`，
+ *                                 实现 src/core/preflight.ts
  * instance:list                   ipc.ts L100
  * instance:create                 ipc.ts L102-108 / parseCreateInput L646-680
  * instance:get                    ipc.ts L110 / requireInstance L423-430
@@ -94,6 +97,25 @@ const host = createHostClient({ writeLine });
  * 通道实现
  * ------------------------------------------------------------------ */
 
+/**
+ * 自检时跳过的通道（构建期常量，默认空）。
+ *
+ * **为什么要有这个逃生开关**：`CH` 是唯一的契约事实源，而"契约先加通道、两端实现随后跟上"
+ * 是正常的并行落地顺序。那种中间状态下 `assertChannelCoverage` 会让**整个桥接进程起不来** ——
+ * 连与这条新通道无关的页面与用例都一起停摆，代价远大于收益（UI 自动化测试就是这么被卡住的）。
+ * 因此允许在**明确知道少的是哪一条**时，构建一份"跳过该条"的产物用于本地验证：
+ *
+ *     esbuild desktop/bridge/server.mjs --bundle ... --define:__WHALES_SKIP_CHANNEL__='"launcher:preflight"'
+ *
+ * 常规产物里这个常量是 `undefined`，跳过集合为空 —— 与没有这个开关时逐字等价；
+ * 正式产物仍然要求每条契约通道都有实现。
+ */
+const SKIP_CHANNELS = new Set(
+  typeof __WHALES_SKIP_CHANNEL__ === 'string' && __WHALES_SKIP_CHANNEL__.length > 0
+    ? [__WHALES_SKIP_CHANNEL__]
+    : [],
+);
+
 const handlers = {
   /* ---------------- 内建方法（协议 §3.2） ---------------- */
 
@@ -101,7 +123,10 @@ const handlers = {
     protocol: PROTOCOL_VERSION,
     // 版本未知时返回空串（**绝不**用 `0.0.0` 之类的假值冒充）；构建产物里恒为真实版本。
     appVersion: store.appVersionOrNull() ?? '',
-    channels: ALL_CHANNELS,
+    // 如实报告"这一份产物实际实现了哪些通道"：被 SKIP_CHANNELS 跳过的条目不列出来，
+    // 否则 C# 侧会把它读成"Node 多出一条本地不认识的通道"而在握手断言上失败
+    // （协议 §5.3 只要求"两端清单一致"，没规定清单必须等于契约全集）。
+    channels: ALL_CHANNELS.filter((channel) => !SKIP_CHANNELS.has(channel)),
     hostMethods: [...HOST_METHODS],
   }),
 
@@ -127,6 +152,22 @@ const handlers = {
 
   /** ipc.ts L95-96 */
   [CH.launcher.detectNode]: async (refresh) => core.detectNode(store.launcherRoot(), refresh === true),
+
+  /**
+   * 环境与依赖自检（**本轮新增通道**，旧 Electron 版没有对应能力）。
+   *
+   * 参数：`[options?: PreflightOptions]` —— 校验见 `validate.mjs` 的 `parsePreflightOptions`
+   * （只放行白名单字段；这些开关能让 core 联网下载并安装依赖）。
+   * 返回：`PreflightReport`（逐项结论 + 自动修复了什么 + 还需要用户做什么）。
+   *
+   * **耗时提醒**：`options.installEngine === true` 且本机一个引擎都没有时，这里会联网安装
+   * dsh（首次需数分钟）。进度经 launcher 日志流实时下发，调用方（C# 侧）必须给足超时。
+   * core 侧对同一根目录做了单飞：界面连点"自检"不会并发跑两遍安装。
+   */
+  [CH.launcher.preflight]: async (options) => {
+    const parsed = v.parsePreflightOptions(options);
+    return core.runPreflight(store.launcherRoot(), parsed, logSink(LAUNCHER_LOG_ID));
+  },
 
   /* ---------------- instance ---------------- */
 
@@ -796,6 +837,7 @@ function assertChannelCoverage() {
   for (const group of Object.values(CH)) {
     for (const channel of Object.values(group)) {
       if (PUSH_ONLY_CHANNELS.has(channel)) continue;
+      if (SKIP_CHANNELS.has(channel)) continue;
       if (!Object.prototype.hasOwnProperty.call(handlers, channel)) missing.push(channel);
     }
   }

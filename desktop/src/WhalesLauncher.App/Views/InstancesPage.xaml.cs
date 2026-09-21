@@ -22,29 +22,31 @@ namespace WhalesLauncher.Views;
 /// 架构约束（约定 §9）：视图不直接持有 <c>CoreBridge</c>，一律经
 /// <see cref="AppServices.State"/> 与 <see cref="AppServices.Bridge"/>。
 /// </summary>
-public sealed partial class InstancesPage : Page
+public sealed partial class InstancesPage : Page, System.ComponentModel.INotifyPropertyChanged
 {
-    /// <summary>
-    /// 状态的"存在感"窗口：启动中/停止中/已崩溃三种状态在两分钟内按活跃处理。
-    ///
-    /// 为什么需要它：后端**不会**在崩溃时主动推送 —— 桥接协议 §2.4 只登记了 <c>log:chunk</c>
-    /// 与 <c>log:state</c> 两条事件，而这两条是日志管线状态，不是实例运行态。唯一事实源是
-    /// <c>instance:list</c>，所以要感知"崩溃了"只能靠周期轮询。这份窗口让刚崩溃的实例在
-    /// 结束时保持 4 秒一次的轮询，避免用户看到"运行中的卡片永远不变红"。
-    /// </summary>
-    private static readonly TimeSpan ActiveWindow = TimeSpan.FromMinutes(2);
-
     /// <summary>
     /// 轮询间隔。取值理由：一个 Node 请求 + 目录枚举，实测成本远低于 1 次磁盘刷新；
     /// 4 s 与旧实现时钟的秒级刷新配合，既能让人眼觉得"状态是活的"，又不会打满 IO。
-    /// 无活跃实例时定时器根本不会启动（见 <see cref="SyncTimer"/>），因此空闲时零开销。
+    /// 没有"可能变化"的实例时定时器根本不会启动（见 <see cref="SyncTimer"/>），因此空闲时零开销。
     /// </summary>
     private static readonly TimeSpan WatchInterval = TimeSpan.FromSeconds(4);
 
     /// <summary>搜索防抖。取值理由：旧实现每次 keydown 全量重排；卡片网格比旧 DOM 重，250 ms 是"打字不停顿但不抖"的常用值。</summary>
     private static readonly TimeSpan SearchDebounce = TimeSpan.FromMilliseconds(250);
 
-    /// <summary>排序项顺序必须与 XAML 里 <c>SortBox</c> 的 <c>ComboBoxItem</c> 一致。</summary>
+    /// <summary>
+    /// 实例包导入/导出用的超时。
+    ///
+    /// 默认的 30 秒不够：导入要按包内清单重装依赖（`pluginAdd` → npm/pnpm），
+    /// 本地缓存缺失时一次 `npm install` 就可能跑几分钟；导出要写 zip（大实例的
+    /// 日志与工作区可能几百 MB）。超时在此处放宽到 30 分钟 —— 用户全程能看到
+    /// 顶部 ProgressBar，不存在"界面像卡死"的问题。
+    /// </summary>
+    private static readonly TimeSpan PackTimeout = TimeSpan.FromMinutes(30);
+
+    /// <summary>
+    /// 排序项顺序必须与 XAML 里 <c>SortBox</c> 的 <c>ComboBoxItem</c> 一致。
+    /// </summary>
     private static readonly string[] SortKeys = { "recent", "name", "created", "plugins" };
 
     private readonly ObservableCollection<InstanceCard> _cards = new();
@@ -61,6 +63,9 @@ public sealed partial class InstancesPage : Page
     private bool _loading;
     private bool _initialized;
 
+    /// <summary>实例包导入/导出是否正在进行（两者互斥：同一时刻只允许一个长时间对话框 + 落盘任务）。</summary>
+    private bool _packBusy;
+
     /// <summary>
     /// 界面是否已经装配完成。
     ///
@@ -72,6 +77,39 @@ public sealed partial class InstancesPage : Page
     /// 让 WinUI 抛 <c>STATUS_STOWED_EXCEPTION (0xC000027B)</c>，**应用连窗口都出不来**。
     /// </summary>
     private bool _ready;
+
+    /// <summary>
+    /// 卡片「更多」菜单里的「导出实例包…」是否可用（导入/导出期间禁用）。
+    ///
+    /// 为什么放在页面上而不是卡片视图模型上：这是**页面级**的忙状态（同一时刻只允许
+    /// 一个实例包任务），若塞进 <see cref="InstanceCard"/>，每张卡都要各自跟着变，
+    /// 而它们无法感知别的卡片在做什么 —— 那样必然出现"两个实例同时导出"的竞态。
+    /// 卡片模板用 <c>{Binding PackMenuEnabled, ElementName=RootGrid}</c> 借用这一个开关。
+    /// </summary>
+    public bool PackMenuEnabled
+    {
+        get => _packMenuEnabled;
+        set
+        {
+            if (_packMenuEnabled == value) return;
+            _packMenuEnabled = value;
+            OnPropertyChanged(nameof(PackMenuEnabled));
+        }
+    }
+
+    private bool _packMenuEnabled = true;
+
+    /// <summary>
+    /// <c>{Binding}</c> 需要的变更通知。
+    ///
+    /// 本页只有一个走经典绑定（而非 x:Bind）的属性 —— <see cref="PackMenuEnabled"/>，
+    /// 因为卡片菜单项在 <c>DataTemplate</c> 里，x:Bind 的数据根是 <see cref="InstanceCard"/>，
+    /// 取不到页面上的属性（XAML 注释里已说明同类取舍）。经典绑定必须自己发通知。
+    /// </summary>
+    public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
+
+    private void OnPropertyChanged(string name) =>
+        PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(name));
 
     public InstancesPage()
     {
@@ -208,8 +246,8 @@ public sealed partial class InstancesPage : Page
 
     private void OnInstancesChanged(object? sender, EventArgs e)
     {
-        // 事件在 UI 线程触发（AppState 由页面异步链驱动）；仍走 TryEnqueue 兜底，
-        // 避免未来后端推送改到后台线程时静默失效（约定 §8「跨线程更新 UI」）。
+        // 事件在 UI 线程触发（AppState 已把后端推送汇入 UI 线程，页面自身的异步链也都在 UI 线程）；
+        // 仍走 TryEnqueue 兜底，避免未来有订阅方改到后台线程时静默失效（约定 §8「跨线程更新 UI」）。
         if (DispatcherQueue.HasThreadAccess)
         {
             ApplyStateSnapshot();
@@ -300,10 +338,10 @@ public sealed partial class InstancesPage : Page
         }
     }
 
-    /// <summary>仅当存在"活跃"实例时才轮询：全静止时停表，空闲不产生任何后端调用。</summary>
+    /// <summary>仅当存在"状态还可能变"的实例时才轮询：全静止时停表，空闲不产生任何后端调用。</summary>
     private void SyncTimer()
     {
-        var needed = _all.Exists(IsActive);
+        var needed = _all.Exists(MayStillChange);
         if (needed)
         {
             if (!_watchTimer.IsEnabled) _watchTimer.Start();
@@ -314,20 +352,34 @@ public sealed partial class InstancesPage : Page
         }
     }
 
-    /// <summary>启动中 / 停止中 / 刚崩溃 —— 这三种状态会在人眼可感知的时间内自行改变，需要盯着。</summary>
-    private static bool IsActive(InstanceSummary summary)
+    /// <summary>
+    /// 这张卡的状态是否**还可能变**（据此决定要不要继续 4 秒轮询）。
+    ///
+    /// 判据是「当前状态自称还握着一个进程」，而不是"最近 N 分钟内崩过"：
+    ///
+    ///  - <c>starting</c> / <c>stopping</c>：过渡态，必然还会变；
+    ///  - <c>running</c>：可能下一秒就崩 —— 这是本页唯一无法从推送得知的转变
+    ///    （`log:state` 只在启动/停止/退出时推，而"进程被外部杀掉"或"dsh 自己崩"
+    ///    由 core 的退出链推最后一帧，界面必须还有一种兜底手段）；
+    ///  - <c>crashed</c> / <c>stopping</c> 但 <c>pid</c> 还在：进程还没被真正回收，状态未定。
+    ///
+    /// 一旦进入 <c>stopped</c> / <c>crashed</c> 且 <c>pid</c> 为 null，后端已经给出终态，
+    /// 轮询立刻停止 —— 既不会为静态实例白跑请求，也不会出现"崩溃后卡片永远不变红"
+    /// （旧实现的按时间窗口判定会在窗口外停表，崩溃状态若错过那一帧就再也补不上）。
+    /// </summary>
+    private static bool MayStillChange(InstanceSummary summary)
     {
-        var state = summary.Runtime?.State;
+        var runtime = summary.Runtime;
+        var state = runtime?.State;
+
         if (string.Equals(state, InstanceStateValues.Starting, StringComparison.Ordinal) ||
             string.Equals(state, InstanceStateValues.Stopping, StringComparison.Ordinal))
         {
             return true;
         }
 
-        if (!string.Equals(state, InstanceStateValues.Crashed, StringComparison.Ordinal)) return false;
-
-        var at = ParseOffset(summary.Runtime?.StartedAt);
-        return at is not null && DateTimeOffset.Now - at.Value < ActiveWindow;
+        // running 或者"自称还有进程"的崩溃态：进程仍在，状态随时可能落定。
+        return runtime?.Pid is not null && runtime.Pid > 0;
     }
 
     /* ------------------------------------------------------------------ *
@@ -560,6 +612,73 @@ public sealed partial class InstancesPage : Page
 
     private void OnRefreshClick(object sender, RoutedEventArgs e) => _ = RefreshAsync(showProgress: true);
 
+    /// <summary>
+    /// 页头「导入实例包」：选包 → 导入 → 刷新列表。
+    ///
+    /// 选文件由 Node 侧反向调用宿主方法 <c>host:pickPackFile</c> 完成
+    /// （协议 §3.3：页面**不直接**碰 <c>host:</c>，只在业务通道里表达意图），
+    /// 因此用户取消选择时后端返回 null —— 那是取消，不是错误。
+    /// </summary>
+    private async void OnImportPackClick(object sender, RoutedEventArgs e)
+    {
+        if (_packBusy) return;
+
+        _packBusy = true;
+        PackMenuEnabled = false;
+        // 导入可能要重装依赖（数分钟），用顶部不定量进度条表达"正在处理"，
+        // 而不是把界面卡住或只给一个看不到进度的对话框。
+        RefreshBar.Visibility = Visibility.Visible;
+
+        try
+        {
+            var result = await AppServices.Bridge.CallAsync<ImportResult>(
+                Channels.PackImport,
+                PackTimeout);
+
+            if (!result.Ok)
+            {
+                AppServices.Toast.Error("导入实例包失败", result.Error);
+                return;
+            }
+
+            // 用户取消选择包文件：后端按契约返回 null（不是失败），静默收场。
+            if (result.Value is null)
+            {
+                return;
+            }
+
+            var imported = result.Value;
+            var warnings = imported.Warnings is { Count: > 0 }
+                ? string.Join("\n", imported.Warnings)
+                : null;
+
+            // 导入成功但有告警（例如引擎版本未安装已自动回退）时必须让用户看见，
+            // 否则他会拿着一个"看起来正常、一启动就报错"的实例。用 Warning 而不是 Success。
+            if (warnings is not null)
+            {
+                AppServices.Toast.Warning($"已导入实例「{imported.Name}」，但有需要注意的项。", warnings);
+            }
+            else
+            {
+                AppServices.Toast.Success($"已导入实例「{imported.Name}」。");
+            }
+        }
+        catch (Exception ex)
+        {
+            // 桥接进程断开时 CallAsync 也可能抛；界面必须仍然可用。
+            AppServices.Toast.Error("导入实例包失败", ex.Message);
+        }
+        finally
+        {
+            _packBusy = false;
+            PackMenuEnabled = true;
+            RefreshBar.Visibility = Visibility.Collapsed;
+        }
+
+        // 导入会新增实例（可能还改动了引擎绑定），刷新列表让新卡片立刻出现。
+        await RefreshAsync(showProgress: false);
+    }
+
     private void OnCreateClick(object sender, RoutedEventArgs e) =>
         AppServices.Navigation.Navigate(RouteKeys.Create);
 
@@ -668,6 +787,9 @@ public sealed partial class InstancesPage : Page
             case "refresh":
                 _ = RefreshAsync(showProgress: false);
                 return;
+            case "export":
+                _ = ExportPackAsync(card);
+                return;
             case "remove":
                 _ = RemoveAsync(card);
                 return;
@@ -764,6 +886,79 @@ public sealed partial class InstancesPage : Page
         if (!result.Ok)
         {
             AppServices.Toast.Error("打开界面失败", result.Error);
+        }
+    }
+
+    /// <summary>
+    /// 卡片「更多 → 导出实例包…」：把该实例导出成 zip。
+    ///
+    /// 保存位置由 Node 侧通过宿主方法 <c>host:saveFile</c> 弹出系统"另存为"获得
+    /// （默认落在系统下载目录），用户取消时后端返回 null —— 取消不是错误。
+    /// </summary>
+    private async Task ExportPackAsync(InstanceCard card)
+    {
+        var summary = card.Summary;
+        if (_packBusy)
+        {
+            AppServices.Toast.Info("正在处理上一个实例包操作，请稍候。");
+            return;
+        }
+
+        _packBusy = true;
+        PackMenuEnabled = false;
+        RefreshBar.Visibility = Visibility.Visible;
+
+        BridgeResult<string> result;
+        try
+        {
+            result = await AppServices.Bridge.CallAsync<string>(
+                Channels.PackExport,
+                PackTimeout,
+                summary.Meta.Id);
+        }
+        catch (Exception ex)
+        {
+            AppServices.Toast.Error("导出实例包失败", ex.Message);
+            return;
+        }
+        finally
+        {
+            _packBusy = false;
+            PackMenuEnabled = true;
+            RefreshBar.Visibility = Visibility.Collapsed;
+        }
+
+        if (!result.Ok)
+        {
+            AppServices.Toast.Error("导出实例包失败", result.Error);
+            return;
+        }
+
+        // null = 用户在"另存为"里取消；静默，不报错。
+        if (string.IsNullOrWhiteSpace(result.Value))
+        {
+            return;
+        }
+
+        AppServices.Toast.Success(
+            $"已导出实例「{summary.Meta.Name}」的实例包。",
+            $"保存位置：{result.Value}");
+
+        // 把新写的包直接亮给用户看：这是"导出成功"唯一不需要用户再操作的确认方式。
+        // 走宿主方法 host:openPath（协议 §3.3）而不是 Process.Start —— 路径存在性校验
+        // 与打开动作都在 ShellHostMethods 里收口，页面不自建第二条打开外部路径的路径。
+        // Node 侧已保证 zip 与其目录存在，因此这里的失败只影响"顺手打开"，不影响导出结果。
+        // 全限定名是必需的：本文件的画笔代码用了 Microsoft.UI.Xaml.Shapes（Ellipse 等），
+        // 那个命名空间里也有一个 Path，直接写 Path 会 CS0104 二义。
+        var folder = System.IO.Path.GetDirectoryName(result.Value);
+        if (!string.IsNullOrEmpty(folder))
+        {
+            var open = await AppServices.Bridge.CallVoidAsync(Channels.Host.OpenPath, new { path = folder });
+            if (!open.Ok)
+            {
+                // 只是"打开目录"没成功，导出本身已经完成 —— 不要用错误提示惊吓用户。
+                AppServices.Toast.Info("实例包已导出，但未能自动打开所在文件夹。", open.Error);
+            }
         }
     }
 
@@ -874,8 +1069,8 @@ public sealed class InstanceCard
             ? $"在浏览器中打开 {url}"
             : (OpenUiVisibility == Visibility.Visible ? "尚未探测到界面地址" : "实例未运行");
 
-        ProblemText = summary.Problem ?? string.Empty;
-        ProblemVisibility = string.IsNullOrWhiteSpace(summary.Problem)
+        ProblemText = ProblemOf(summary);
+        ProblemVisibility = string.IsNullOrWhiteSpace(ProblemText)
             ? Visibility.Collapsed
             : Visibility.Visible;
 
@@ -975,6 +1170,46 @@ public sealed class InstanceCard
         // 用 StringInfo 而不是 name[0]：emoji / 代理对首字取半会得到乱码
         var enumerator = StringInfo.GetTextElementEnumerator(name);
         return enumerator.MoveNext() ? enumerator.GetTextElement() : "?";
+    }
+
+    /// <summary>
+    /// 卡片上那条黄色原因条要显示什么。
+    ///
+    /// 两个来源，按"更贴近用户当下处境"排序：
+    ///  1. <c>summary.Problem</c> —— core 的目录级降级标记（目录缺失 / 记录损坏 / 清单损坏），
+    ///     契约要求必须显示，且它是"这张卡为什么用不了"的根因；
+    ///  2. <c>runtime.lastError</c> —— **上一次启动失败的说明**。
+    ///
+    /// 第 2 条是本次补上的：进程崩掉后卡片会立刻变红（由后端推送驱动），但如果只有
+    /// 一个「已崩溃」三个字，用户仍然得点开日志才知道原因，等于把"看得见状态"和
+    /// "知道怎么办"拆成了两步。core 在异常退出时已经把可操作的中文提示放在
+    /// `lastError` 首行（例如"端口 3080 已被占用：…请加 --port"），这里直接呈现它。
+    /// 只取首行：`lastError` 首行是提示、其后是 stderr 原文与候选列表，卡片放不下也不该放。
+    /// </summary>
+    private static string ProblemOf(InstanceSummary summary)
+    {
+        if (!string.IsNullOrWhiteSpace(summary.Problem)) return summary.Problem!;
+
+        var runtime = summary.Runtime;
+        var state = runtime?.State;
+        if (!string.Equals(state, InstanceStateValues.Crashed, StringComparison.Ordinal)) return string.Empty;
+
+        var answer = FirstLine(runtime?.LastError);
+        return answer.Length > 0 ? $"上次启动异常退出：{answer}" : "上次启动异常退出，请在详情页的日志里查看原因。";
+    }
+
+    /// <summary>取多行文本的首个非空行（去掉 <c>\r</c>，避免卡片里出现方框）。</summary>
+    private static string FirstLine(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return string.Empty;
+
+        foreach (var raw in text.Split('\n'))
+        {
+            var line = raw.TrimEnd('\r').Trim();
+            if (line.Length > 0) return line;
+        }
+
+        return string.Empty;
     }
 
     /// <summary>

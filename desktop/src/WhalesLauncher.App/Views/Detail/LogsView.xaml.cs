@@ -43,6 +43,13 @@ public sealed partial class LogsView : UserControl
         Logs.FollowTailChanged += OnFollowTailAutoPaused;
     }
 
+    /// <summary>
+    /// 面包屑点击：第 0 段「实例」回实例列表、第 1 段（实例名）回本实例的默认页签、
+    /// 末段（当前页名）不跳转 —— 段位语义与理由见 <see cref="DetailBreadcrumb.OnItemClicked"/>。
+    /// </summary>
+    private void OnCrumbItemClicked(BreadcrumbBar sender, BreadcrumbBarItemClickedEventArgs args) =>
+        DetailBreadcrumb.OnItemClicked(args, _instanceId);
+
     /// <summary>装载：绑定实例、初始化过滤条件、订阅日志推送。</summary>
     public void Load(string instanceId, string instanceName)
     {

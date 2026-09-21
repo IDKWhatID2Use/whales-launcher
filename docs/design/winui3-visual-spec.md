@@ -93,17 +93,16 @@
 
 ### 2.2 窗口与应用外壳结构
 
-外壳分区（对应需求「标题栏 + 左侧实例栏 + 菜单 + 右侧日志抽屉」）：
+外壳分区（对应需求「标题栏 + 左侧功能栏 + 菜单 + 右侧日志抽屉」）：
 
 ```
 Window (root Grid)
 ├─ Row 0  [Auto]  Microsoft.UI.Xaml.Controls.TitleBar   ← 高 48 epx，折进 MenuBar
 └─ Row 1  [*]     SplitView (PanePlacement=Right, DisplayMode=Overlay, OpenPaneLength=480)
-   ├─ SplitView.Content = NavigationView                ← 左侧实例栏 + 内容 Frame
-   │  ├─ PaneHeader      = AutoSuggestBox（实例快速筛选）
-   │  ├─ MenuItemsSource = 实例列表 + 「新建实例」
-   │  ├─ FooterMenuItems = 引擎版本管理 / 全局设置
-   │  └─ Content         = Frame（P1…P8）
+   ├─ SplitView.Content = NavigationView                ← 左侧功能栏 + 内容 Frame
+   │  ├─ MenuItems       = 实例 / 引擎版本管理 / 全局设置   （静态 NavigationViewItem）
+   │  ├─ FooterMenuItems = 关于
+   │  └─ Content         = Frame（P1…P8 + 关于）
    └─ SplitView.Pane    = 日志抽屉（跨实例聚合 / 单实例）
 ```
 
@@ -112,7 +111,7 @@ Window (root Grid)
 | 窗口标题栏高 = **48 epx** | 用 `TitleBar` 控件，高取 `TitleBarExpandedHeight` 键（= 48）；紧凑态为 `TitleBarCompactHeight`（= 32） | `[KEY:TitleBar_themeresources.xaml 中的 TitleBarCompactHeight=32 / TitleBarExpandedHeight=48，见 MUX:docs/design-notes/xaml-styling-guide.md 摘录]`；`[LRN:titlebar-md]` 官方示例用 `<Grid x:Name="AppTitleBar" Height="48">` |
 | 标题栏用官方 `TitleBar` 控件而非裸 `Grid` | `TitleBar` 提供 `Title` / `Subtitle` / `IconSource` / `LeftHeader` / `Content` / `RightHeader` / `IsBackButtonVisible` / `IsBackButtonEnabled` / `IsPaneToggleButtonVisible` 与 `BackRequested` / `PaneToggleRequested` 事件 | `[API:controls/dev/TitleBar/TitleBar.idl]`（`[MUX_PUBLIC_V8]`） |
 | **菜单折进标题栏同一行** | 把 `MenuBar` 放进 `TitleBar.Content` 槽（`Content` 类型为 `UIElement`） | `Content` 类型见 `[API:controls/dev/TitleBar/TitleBar.idl]`；组合方式官方无示例 → **本文档组合约定 `⚠️ 自定`**，但 API 层面合法 |
-| 左侧实例栏用 `NavigationView`，不用 `SplitView` | 官方明确分工：「If you'd like to build a navigation menu with an expand/collapse button and a list of navigation items, then use the NavigationView control.」 | `[LRN:splitview]` |
+| 左侧功能栏用 `NavigationView`，不用 `SplitView` | 官方明确分工：「If you'd like to build a navigation menu with an expand/collapse button and a list of navigation items, then use the NavigationView control.」 | `[LRN:splitview]` |
 | 右侧日志抽屉用 `SplitView` | 官方明确：「The split view control can be used to create any "drawer" experience where users can open and close the supplemental pane.」其 pane「can present itself from either the left side or right side of an app window」 | `[LRN:splitview]` |
 | `NavigationView` 置于 `TitleBar` 下方（不重叠）时，关闭其自动标题栏补白 | `IsTitleBarAutoPaddingEnabled="False"` | `[API:controls/dev/NavigationView/NavigationView.idl]` L292 `Boolean IsTitleBarAutoPaddingEnabled { get; set; };` |
 | 不用 `NavigationView` 自带返回按钮，返回按钮放 `TitleBar` | `TitleBar.IsBackButtonVisible="True"` + `BackRequested`；`NavigationView.IsBackButtonVisible="Collapsed"`（官方示例同款写法） | `[API:controls/dev/TitleBar/TitleBar.idl]`；`[LRN:titlebar-md]` 官方示例 `<NavigationView IsBackButtonVisible="Collapsed" IsSettingsVisible="False">` |
@@ -125,7 +124,7 @@ Window (root Grid)
 
 **断点来源 = `NavigationView` 官方自适应行为**（不要另造一套 `@media` 式断点）：
 
-| 窗口宽（epx） | `NavigationViewDisplayMode` | 左侧实例栏表现 | 出处 |
+| 窗口宽（epx） | `NavigationViewDisplayMode` | 左功能栏表现 | 出处 |
 |---|---|---|---|
 | ≥ 1008 | `Expanded` | 展开左栏（图标 + 文字） | `[LRN:navview]`「An expanded left pane on large window widths (1008px or greater).」；枚举 `[API:controls/dev/NavigationView/NavigationView.idl]` `NavigationViewDisplayMode { Minimal, Compact, Expanded }` |
 | 641 – 1007 | `Compact` | 仅图标（`LeftCompact`） | `[LRN:navview]`「A left, icon-only, nav pane (`LeftCompact`) on medium window widths (641px to 1007px).」 |
@@ -359,10 +358,9 @@ Windows 11 用「阴影 + 轮廓」共同表达高度，官方给出的数值：
 
 | 需求 | 官方控件 | 何时用 | 禁止 | 出处 |
 |---|---|---|---|---|
-| 左侧实例栏 + 页面导航 | `NavigationView` | 主窗口唯一的全局导航；`PaneDisplayMode` 保持默认 `Auto` 以得到官方三段自适应 | 不叠第二个 `NavigationView`；不用它承载页面内页签（那是 `SelectorBar`/`TabView` 的职责） | `[API:controls/dev/NavigationView/NavigationView.idl]` L24-L31（`Auto/Left/Top/LeftCompact/LeftMinimal`）、L178/L181（两个阈值）；`[LRN:navview]`；`[LRN:splitview]`「If you'd like to build a navigation menu… use the NavigationView control.」 |
-| 实例列表在左栏内呈现 | `NavigationView.MenuItemsSource` + `MenuItemTemplate`（`DataTemplate`） | 实例数量动态；项模板要显示 emoji/色点/状态点 | 禁止在 code-behind 手工塞 `NavigationViewItem`（会丢模板可替换性） | `[API:controls/dev/NavigationView/NavigationView.idl]` L204 `Object MenuItemsSource`；`[MUX:docs/design-notes/xaml-styling-guide.md]`（`MenuItemTemplate` 范例） |
-| 左栏底部固定入口（引擎版本 / 全局设置） | `NavigationView.FooterMenuItemsSource` + `IsSettingsVisible="False"` | 需要两个及以上底部入口、且要中文标签与固定顺序 | 不用内置 Settings 项（标签固定为"设置"，无法表达"引擎版本管理"） | `[API:controls/dev/NavigationView/NavigationView.idl]` L183、L190；`[LRN:titlebar-md]` 官方示例 `IsSettingsVisible="False"` |
-| 左栏顶部快速筛选实例 | `NavigationView.PaneHeader` 放 `AutoSuggestBox` | 实例数量 > 8 时启用 | 不放到 `TitleBar` 里抢全局搜索位 | `[LRN:navview]`（Left pane custom content / Top pane header 段） |
+| 左侧功能栏 + 页面导航 | `NavigationView` | 主窗口唯一的全局导航；`PaneDisplayMode` 保持默认 `Auto` 以得到官方三段自适应 | 不叠第二个 `NavigationView`；不用它承载页面内页签（那是 `SelectorBar`/`TabView` 的职责） | `[API:controls/dev/NavigationView/NavigationView.idl]` L24-L31（`Auto/Left/Top/LeftCompact/LeftMinimal`）、L178/L181（两个阈值）；`[LRN:navview]`；`[LRN:splitview]`「If you'd like to build a navigation menu… use the NavigationView control.」 |
+| 左栏是**静态功能列表** | `NavigationView.MenuItems` / `FooterMenuItems` 里直接声明 `NavigationViewItem`（`FontIcon` 16 px 字形 + 文字，`Tag` 即路由键，并设 `AutomationProperties.Name`） | 左栏只做功能导航（实例 / 引擎版本管理 / 全局设置，底部「关于」）；**实例列表只保留在「实例」页内**（同一批数据不在屏幕上出现两次） | 不使用 `MenuItemsSource` / `MenuItemTemplate`：左栏是固定四项、没有动态集合，而"模板 + 数据对象"正是历史上画出"空头像框 + 假『新建实例』"垃圾行的成因 | `[API:controls/dev/NavigationView/NavigationView.idl]` L204 `Object MenuItemsSource`、L183/L190 `FooterMenuItems`；交接文档 §6.1 / §6.3 |
+| 左栏底部固定「关于」 | `NavigationView.FooterMenuItems` + `IsSettingsVisible="False"` | 需要一个固定在 pane 底部的入口，且它是**可导航页面**（因此有正确的选中态） | 不用内置 Settings 项（标签固定为"设置"，无法表达中文标签与顺序）；不要把"点了只弹对话框"的项放进 `FooterMenuItems`（会留下一个语义错误的选中高亮） | `[API:controls/dev/NavigationView/NavigationView.idl]` L183、L190；`[LRN:titlebar-md]` 官方示例 `IsSettingsVisible="False"` |
 | 右侧日志抽屉 | `SplitView`（`PanePlacement="Right"`、`DisplayMode="Overlay"`、`OpenPaneLength="480"`） | 需要"抽屉"式补充面板 | 不用 `NavigationView` 做抽屉；不用 `DisplayMode="Inline"`（会把内容区挤窄，日志是辅助信息） | `[LRN:splitview]`（四种模式定义、支持左右两侧）；`[KEY:generic.xaml]` L15008 `<Style TargetType="SplitView">` 确认默认样式存在 |
 | 返回上一级 | `TitleBar.IsBackButtonVisible` + `BackRequested` 事件 | 详情页（P2–P5）显示返回；P1/P6/P7/P8 隐藏 | 不在页面内自绘返回按钮到内容区左上角（与系统返回位置不一致） | `[API:controls/dev/TitleBar/TitleBar.idl]` L23/L33；`[LRN:titlebar-md]`「Do define a drag region along the top edge of the app canvas. Matching the placement of system title bars makes it easier for users to find.」 |
 | 左栏折叠按钮 | `TitleBar.IsPaneToggleButtonVisible` + `PaneToggleRequested` | 需要把 pane 折叠按钮放进标题栏时 | 不要同时用 `NavigationView` 自带汉堡按钮造成两个入口 | `[API:controls/dev/TitleBar/TitleBar.idl]` L29/L34 |
@@ -602,7 +600,7 @@ Page (Grid, Padding = 24 或 12)
 
 **职责**：窗口框架、全局导航、应用菜单、右侧日志抽屉、全局浮层宿主。
 
-**官方控件**：`TitleBar`、`MenuBar`、`SplitView`、`NavigationView`、`Frame`、`AutoSuggestBox`、`InfoBar`（toast 容器内）。
+**官方控件**：`TitleBar`、`MenuBar`、`SplitView`、`NavigationView`、`NavigationViewItem`、`Frame`、`InfoBar`（toast 容器内）。
 
 **布局骨架**
 
@@ -626,16 +624,16 @@ Window (RootGrid)
     │   ├─ IsSettingsVisible = False
     │   ├─ IsTitleBarAutoPaddingEnabled = False
     │   ├─ AlwaysShowHeader = False
-    │   ├─ PaneHeader = AutoSuggestBox(QueryIcon=Find, PlaceholderText="筛选实例")
-    │   ├─ MenuItemsSource = ObservableCollection<InstanceRow>
-    │   │                    （0..n 实例；末尾一个 Separator；再一个"新建实例"）
-    │   ├─ MenuItemTemplate = DataTemplate:
-    │   │                    Grid[Auto,*,Auto]
-    │   │                      ├─ 头像 Border(32×32, CornerRadius=4) 内 FontIcon 或 emoji TextBlock
-    │   │                      ├─ StackPanel: 名称(BodyStrongTextBlockStyle) + 状态(CaptionTextBlockStyle)
-    │   │                      └─ 状态点 Ellipse(8×8, 语义色) —— 仅作辅色，状态同时有文字
-    │   ├─ FooterMenuItemsSource = [ 引擎版本管理, 全局设置 ]
-    │   └─ Content = Frame（P1…P8，Frame.Navigate(Type, object)）
+    │   ├─ MenuItems = 静态 NavigationViewItem × 3（**功能列表**，不承载实例列表）
+    │   │               ├─ 实例          （FontIcon E8FD List，Tag="instances"）
+    │   │               ├─ 引擎版本管理  （FontIcon E71D AllApps，Tag="engines"）
+    │   │               └─ 全局设置      （FontIcon E713 Setting 标准齿轮，Tag="settings"）
+    │   ├─ FooterMenuItems = 静态 NavigationViewItem × 1
+    │   │               └─ 关于          （FontIcon E946 Info，Tag="about"）
+    │   ├─ 每项**必须**设 AutomationProperties.Name（UI 自动化按名字定位；
+    │   │   标签文案见 docs/design/demo/ui-function-nav.html）
+    │   ├─ 无 PaneHeader、无 MenuItemsSource、无 MenuItemTemplate
+    │   └─ Content = Frame（P1…P8 + 关于，Frame.Navigate(Type, object)）
     └─ Pane = 日志抽屉
         ├─ Grid[Auto,*]
         │   ├─ Row0: StackPanel(Horizontal)
@@ -652,12 +650,27 @@ Window (RootGrid)
 | 抽屉宽 | 480 | `⚠️ 自定` |
 | 抽屉模式 | `Overlay`（叠在内容上） | §6.1 |
 | 左栏默认显示模式 | `Auto` | §2.3 |
+| 左栏项 | 图标 16 px（Segoe Fluent Icons 字形）+ 文字 14 px；项高 40、圆角 5、左右内边距 12 | 视觉基准 `docs/design/demo/ui-function-nav.html` |
+| 左栏选中态 | 框架默认（背景 + 左侧 3 px 强调色指示条 + 字重）；**图标不染强调色**（深色下会突兀） | 交接文档 §6.4 |
+| 左栏宽度 | 保持框架默认 `OpenPaneLength`（演示稿按 280 px 画的只是观感参照） | — |
+| 窗口控制按钮配色 | 按**当前生效主题**显式设置 `AppWindowTitleBar.Button*Color`（深色：白字形 / 浅色：黑字形；背景透明，悬停/按下叠一层很淡的覆盖色） | 这些按钮由**系统**按**系统主题**绘制，不跟随 `RootGrid.RequestedTheme`；"深色窗口跑在浅色系统上"时字形与标题栏同为暗色，实测"三个按钮几乎不可见"（用户反馈）。注意 API 在 `AppWindowTitleBar` 上，**不是** XAML `TitleBar` 控件的属性 |
 | 菜单来源 | `app.menu()` → `MenuNode[]`，动态构造 `MenuBarItem` / `MenuFlyoutItem` / `MenuFlyoutSeparator` | 契约 `src/shared/contracts.ts:686`、`MenuNode` 注释"渲染层的自绘菜单只是它的视图，不得自行维护第二份定义" |
+
+> **左栏为什么不放实例列表**：实例列表只在「实例」页内出现（卡片网格 + 页内搜索 / 状态筛选 / 排序）。
+> 同一批数据同时画在左栏与内容区是用户明确指出的**功能重复**；改版后左栏是纯功能导航，
+> 「实例」项在实例列表页与详情页都处于选中态 —— 这也顺带修掉了此前的两个登记缺陷
+> （P1 停在实例列表时左栏无高亮；从 P6/P7/P8 没有任何路径回到 P1）。
+>
+> 左栏项是**静态 `NavigationViewItem`**，不违反 §6.1（那条禁止的是在 code-behind 里手工塞项、
+> 丢掉模板可替换性）。历史坑记在这里以免重蹈：`NavigationView` 会把 `MenuItemTemplate`
+> 也套到"自容器项"（`NavigationViewItem` / `NavigationViewItemSeparator`）上，导致模板里的
+> `x:Bind` 全部失败、画出"空头像框 + 假『新建实例』"的垃圾行（交付报告 §3 有完整复盘）。
+> 现在没有 `MenuItemTemplate` / `MenuItemsSource`，这个坑不会再现。
 
 **浮层宿主**：toast 容器（`Grid.HorizontalAlignment=Right`、`VerticalAlignment=Top`、`Canvas.ZIndex` 最大、`Margin=0,56,24,0`）位于 `RootGrid` 最上层，**不拦截点击**（容器 `IsHitTestVisible=False`，每条 toast `True`）。
 
 **空态/加载态/错误态**
-- 无实例：P1 空态 + 左栏 `MenuItemsSource` 只剩"新建实例"。
+- 无实例：左栏**不变**（功能列表与实例数量无关，四项始终在），实例页显示空态 A「还没有实例」+ 主按钮。
 - 后端探测失败：窗口仍要出界面（外壳先渲染），用 toast（最多 3 条去重）+ 页级 `InfoBar` 说明。
 - 主题：外壳无独立错误态。
 
@@ -1080,6 +1093,7 @@ Grid[Auto, Auto, *]
 
 **硬性规则**
 - 必须设 `XamlRoot`（取所在页 `this.XamlRoot`；从 `Window` 发起时取窗口根元素）。`[LRN:dialogs]`「set the `XamlRoot` property on the `ContentDialog` before calling `ShowAsync`. If you don't set…（失败）」
+- **必须显式设 `RequestedTheme`**，取窗口根元素（外壳的 `RootGrid`）的当前主题 —— 实测 `ContentDialog` **不继承**它：对话框渲染在 XamlRoot 的浮层（PopupRoot）上，不是窗口根元素的可视树，外壳把主题设在 `RootGrid` 上时对话框仍按系统主题绘制（表现为"深色窗口弹出浅色对话框"，见 §11 U21）。`Services/DialogService.cs` 已统一处理；**任何新增对话框都应经它构造**，不要各处 `new ContentDialog`。
 - **同一窗口同时只能有一个 `ContentDialog`**；需要"多级"时改成"单对话框内换内容"，不要叠加。`[LRN:dialogs]`「There can only be one ContentDialog open per window at a time. Attempting to open two content dialogs will throw an exception.」
 - 尺寸由内置键约束：最小宽 320、最大宽 548、最大高 756。`[KEY:generic.xaml]`
 - 圆角取 `OverlayCornerRadius`（8）。`[LRN:rounded-corner]`
@@ -1155,7 +1169,7 @@ Grid[Auto, Auto, *]
 | E25 | `NavigationView` 三段自适应与两个阈值（默认 640/1008） | LRN + API | https://learn.microsoft.com/en-us/windows/apps/design/controls/navigationview；`controls/dev/NavigationView/NavigationView.idl` | 「An expanded left pane on large window widths (1008px or greater). A left, icon-only, nav pane (LeftCompact) on medium window widths (641px to 1007px). Only a menu button (LeftMinimal) on small window widths (640px or less).」；`Double CompactModeThresholdWidth`/`ExpandedModeThresholdWidth` |
 | E26 | `NavigationView` Header 固定 52 px、内容边距 12/24 | LRN | 同上 | 「It has a fixed height of 52 px.」「We recommend 12px margins for your content area when NavigationView is in Minimal mode and 24px margins otherwise.」 |
 | E27 | `NavigationViewDisplayMode` / `NavigationViewPaneDisplayMode` 枚举成员 | API | `controls/dev/NavigationView/NavigationView.idl` L6-L31 | `enum NavigationViewDisplayMode { Minimal = 0, Compact = 1, Expanded = 2 };`、`enum NavigationViewPaneDisplayMode { Auto = 0, Left = 1, Top = 2, LeftCompact = 3, LeftMinimal = 4 };` |
-| E28 | `AlwaysShowHeader` / `IsTitleBarAutoPaddingEnabled` / `IsSettingsVisible` / `FooterMenuItemsSource` | API | 同上 L183/L190/L194/L292 | 同左 |
+| E28 | `AlwaysShowHeader` / `IsTitleBarAutoPaddingEnabled` / `IsSettingsVisible` / `MenuItems` / `FooterMenuItems` | API | 同上 L183/L190/L194/L292 | 同左 |
 | E29 | `SplitView` 支持左右两侧、四种模式、默认收拢宽 48 | LRN | https://learn.microsoft.com/en-us/windows/apps/design/controls/split-view | 「can present itself from either the left side or right side of an app window」「The pane has four modes: Overlay / Inline / CompactOverlay / CompactInline」「The default closed pane width is 48px, which can be modified with CompactPaneLength.」 |
 | E30 | 导航用 NavigationView、抽屉用 SplitView | LRN | 同上 | 「The split view control can be used to create any "drawer" experience」「If you'd like to build a navigation menu … then use the NavigationView control.」 |
 | E31 | `TitleBar` 控件 API（Title/Subtitle/IconSource/LeftHeader/Content/RightHeader/IsBackButtonVisible/IsPaneToggleButtonVisible/BackRequested/PaneToggleRequested） | API | `controls/dev/TitleBar/TitleBar.idl` L9-L47（`[MUX_PUBLIC_V8]`） | 同左 |
@@ -1229,8 +1243,10 @@ Grid[Auto, Auto, *]
 | U18 | `LauncherConfig.theme` 缺少 `'system'` 取值 | ⚠️ 契约缺口（非"查不到出处"，而是**产品/契约层面待决策**） | 已显式上报（§3.4、§9.9），要求先报 Lead 再扩展契约 |
 | U19 | 取消引擎安装 / 取消插件安装的后端能力 | ⚠️ 契约无取消通道 | UI 的"取消"按钮禁用并 ToolTip 说明（§9.3、§9.7） |
 | U20 | 前后端"命名校验规则"在 C# 侧重实现的可行性 | ⚠️ 未评估（后端规则在 TS `core/names.ts`） | 要求"同一套规则、不得两份实现"（§9.8）；实现方式由 Lead 定 |
+| U21 | `ContentDialog` 是否继承窗口根元素的 `RequestedTheme` | ❌ **实测不继承**（本机：外壳为深色时对话框仍按系统浅色绘制） | 由 `Services/DialogService.cs` 显式把窗口主题传给每个对话框（`RequestedTheme = 窗口根元素.RequestedTheme`），见 §9.10.1 |
+| U22 | 「环境自检」的报告呈现形态 | ❌ 官方无对应控件；本规范 §9.9 亦未涉及 | 自定：`Controls/PreflightReportView`（页面内联 + 首启对话框共用），逐项状态走"色 + 图标 + 文字"三通道（§8.2） |
 
-**无法查证项合计：20 条**（其中 6 条为"官方确无对应控件"的取舍项，1 条为契约缺口，1 条为产品能力缺口，其余为数值/参数级自定项）。
+**无法查证项合计：22 条**（其中 7 条为"官方确无对应控件"的取舍项，1 条为契约缺口，1 条为产品能力缺口，其余为数值/参数级自定项）。
 
 ---
 

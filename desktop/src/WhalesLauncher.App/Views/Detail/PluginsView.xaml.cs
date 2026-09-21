@@ -60,6 +60,13 @@ public sealed partial class PluginsView : UserControl
         await RefreshAsync();
     }
 
+    /// <summary>
+    /// 面包屑点击：第 0 段「实例」回实例列表、第 1 段（实例名）回本实例的默认页签、
+    /// 末段（当前页名）不跳转 —— 段位语义与理由见 <see cref="DetailBreadcrumb.OnItemClicked"/>。
+    /// </summary>
+    private void OnCrumbItemClicked(BreadcrumbBar sender, BreadcrumbBarItemClickedEventArgs args) =>
+        DetailBreadcrumb.OnItemClicked(args, _instanceId);
+
     /// <summary>刷新三块数据。</summary>
     public async Task RefreshAsync()
     {

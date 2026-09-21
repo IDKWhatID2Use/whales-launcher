@@ -7,11 +7,26 @@
                   ├─ LeftHeader  = MenuBar（菜单树来自后端 app:menu，界面不自己定义菜单）
                   └─ RightHeader = 「运行日志」ToggleButton（带未读错误 InfoBadge）+ 主题切换 Button
       Row1 [*]    SplitView（PanePlacement=Right、Overlay、OpenPaneLength=480）= 运行日志抽屉
-                  └─ Content = NavigationView（左实例栏 + 内容 Frame）
+                  └─ Content = NavigationView（左功能栏 + 内容 Frame）
       顶层        ToastHost（浮层宿主，§9.10.2；容器不拦截点击）
 
-    为什么状态点用 Style 而不是在 code-behind 取画刷：Style 的 Setter 里写 {ThemeResource}，
-    框架会在元素上求值并在主题切换时重新解析；code-behind 里取到的画刷对象换主题后不会刷新。
+    左栏是**纯功能导航**（实例 / 引擎版本管理 / 全局设置，底部固定「关于」），
+    在这里**静态声明**，不再走 MenuItemsSource + MenuItemTemplate：
+      · 实例列表只保留在「实例」页内 —— 同一批数据不再在屏幕上出现两次（用户指出的功能重复）；
+      · 静态项不重建集合，因此"ItemsSource 被替换后框架自动选中第一项"这个坑
+        连同对抗它的 RebuildRail() 一起消失（它在旧实现里会覆盖深链建立的详情路由）；
+      · 项上必须写 AutomationProperties.Name —— UI 自动化按名字定位它，
+        这同时修掉了旧方案里左栏项的 UIA Name 是 CLR 类型名（WhalesLauncher.Shell.RailEntry）的缺陷。
+
+    历史坑（交接文档 §6.3）：NavigationView 会把 MenuItemTemplate 也套到"自容器项"
+    （NavigationViewItem / NavigationViewItemSeparator）上，导致模板里的 x:Bind 全部失败、
+    画出"空头像框 + 空警示图标 + 假『新建实例』"的垃圾行。本文件已不使用 MenuItemTemplate，
+    这个坑不会再现；将来若要给左栏加自定义行，请另想办法，不要恢复 MenuItemTemplate
+    配数据对象的组合。
+
+    选中态由框架自带的样式给出（背景 + 左侧 3 px 强调色指示条 + 字重），
+    **不要**给选中项的图标上强调色 —— 深色主题下只有那一枚图标会变成亮青色、与主题不搭
+    （用户明确指出的两点之一，交接文档 §6.4）。
 -->
 <Window
     x:Class="WhalesLauncher.MainWindow"
@@ -19,133 +34,13 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:muxc="using:Microsoft.UI.Xaml.Controls"
     xmlns:controls="using:WhalesLauncher.Controls"
-    xmlns:detail="using:WhalesLauncher.Views.Detail"
-    xmlns:shell="using:WhalesLauncher.Shell">
+    xmlns:detail="using:WhalesLauncher.Views.Detail">
 
     <Grid x:Name="RootGrid">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
-
-        <Grid.Resources>
-            <!-- 实例状态点（规范 §9.1：8×8 语义色，仅作辅色；状态同时有文字） -->
-            <Style x:Key="RailDotRunning" TargetType="Ellipse">
-                <Setter Property="Fill" Value="{ThemeResource SystemFillColorSuccessBrush}" />
-            </Style>
-            <Style x:Key="RailDotTransitional" TargetType="Ellipse">
-                <Setter Property="Fill" Value="{ThemeResource SystemFillColorAttentionBrush}" />
-            </Style>
-            <Style x:Key="RailDotCrashed" TargetType="Ellipse">
-                <Setter Property="Fill" Value="{ThemeResource SystemFillColorCriticalBrush}" />
-            </Style>
-            <Style x:Key="RailDotStopped" TargetType="Ellipse">
-                <Setter Property="Fill" Value="{ThemeResource TextFillColorTertiaryBrush}" />
-            </Style>
-
-            <!--
-                左栏行模板（规范 §9.1：头像 32×32 + 名称/状态 + 状态点）。
-
-                NavigationView 只有单一的 MenuItemTemplate（没有模板选择器），
-                所以"实例 / 新建实例 / 无匹配"三种行共用一个模板，靠 Visibility 分支。
-            -->
-            <DataTemplate x:Key="InstanceRailItemTemplate" x:DataType="shell:RailEntry">
-                <Grid>
-                    <!-- 实例行 -->
-                    <Grid MinHeight="40" ColumnSpacing="8" Visibility="{x:Bind InstanceVisibility}">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-
-                        <!-- 头像：emoji（meta.icon）或名称首字；尺寸取规范 §5.4 的图标档位 -->
-                        <Border
-                            Grid.Column="0"
-                            Width="32"
-                            Height="32"
-                            VerticalAlignment="Center"
-                            Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
-                            BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
-                            BorderThickness="1"
-                            CornerRadius="{ThemeResource ControlCornerRadius}"
-                            AutomationProperties.AccessibilityView="Raw">
-                            <TextBlock
-                                FontSize="16"
-                                HorizontalAlignment="Center"
-                                VerticalAlignment="Center"
-                                Text="{x:Bind AvatarText}" />
-                        </Border>
-
-                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                            <TextBlock
-                                Style="{StaticResource BodyStrongTextBlockStyle}"
-                                Text="{x:Bind Name}"
-                                TextTrimming="CharacterEllipsis" />
-                            <TextBlock
-                                Style="{StaticResource CaptionTextBlockStyle}"
-                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                Text="{x:Bind StatusText}"
-                                TextTrimming="CharacterEllipsis" />
-                        </StackPanel>
-
-                        <StackPanel
-                            Grid.Column="2"
-                            VerticalAlignment="Center"
-                            Orientation="Horizontal"
-                            Spacing="8">
-                            <!-- 降级可见（契约硬要求：InstanceSummary.problem 必须显示出来） -->
-                            <FontIcon
-                                FontSize="16"
-                                Foreground="{ThemeResource SystemFillColorCautionBrush}"
-                                Glyph="&#xE7BA;"
-                                AutomationProperties.Name="{x:Bind ProblemText}"
-                                ToolTipService.ToolTip="{x:Bind ProblemText}"
-                                Visibility="{x:Bind ProblemVisibility}" />
-                            <Ellipse
-                                Width="8"
-                                Height="8"
-                                AutomationProperties.AccessibilityView="Raw"
-                                Style="{Binding DotStyle}" />
-                        </StackPanel>
-                    </Grid>
-
-                    <!-- 入口行：新建实例 / 引擎版本管理 / 全局设置（图标 + 文字） -->
-                    <StackPanel
-                        MinHeight="40"
-                        VerticalAlignment="Center"
-                        Orientation="Horizontal"
-                        Spacing="12"
-                        Visibility="{x:Bind SimpleVisibility}">
-                        <FontIcon
-                            FontSize="16"
-                            Glyph="{x:Bind Glyph}"
-                            ToolTipService.ToolTip="{x:Bind Tooltip}" />
-                        <TextBlock
-                            VerticalAlignment="Center"
-                            Style="{StaticResource BodyTextBlockStyle}"
-                            Text="{x:Bind Name}" />
-                    </StackPanel>
-
-                    <!-- 分隔线（实例区与操作区之间） -->
-                    <Border
-                        Height="1"
-                        VerticalAlignment="Center"
-                        Background="{ThemeResource DividerStrokeColorDefaultBrush}"
-                        AutomationProperties.AccessibilityView="Raw"
-                        Visibility="{x:Bind SeparatorVisibility}" />
-
-                    <!-- 筛选无结果的说明行（不可导航，见 MainWindow.OnNavSelectionChanged） -->
-                    <TextBlock
-                        VerticalAlignment="Center"
-                        Style="{StaticResource CaptionTextBlockStyle}"
-                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                        Text="{x:Bind StatusText}"
-                        TextWrapping="Wrap"
-                        Visibility="{x:Bind NoMatchVisibility}" />
-                </Grid>
-            </DataTemplate>
-        </Grid.Resources>
 
         <!-- Mica 不可用时的实色兜底层（规范 §3.3 的降级语义），默认折叠，由 MainWindow 探测后决定 -->
         <Border
@@ -326,17 +221,67 @@
                 IsBackButtonVisible="Collapsed"
                 IsSettingsVisible="False"
                 IsTitleBarAutoPaddingEnabled="False"
-                MenuItemTemplate="{StaticResource InstanceRailItemTemplate}"
                 PaneDisplayMode="Auto"
                 SelectionChanged="OnNavSelectionChanged">
-                <muxc:NavigationView.PaneHeader>
-                    <muxc:AutoSuggestBox
-                        x:Name="InstanceFilter"
-                        PlaceholderText="筛选实例"
-                        QueryIcon="Find"
-                        AutomationProperties.Name="筛选实例"
-                        TextChanged="OnInstanceFilterChanged" />
-                </muxc:NavigationView.PaneHeader>
+
+                <!--
+                    左栏 = 功能列表（静态声明）。
+
+                    每项的 Tag 就是路由键，由 code-behind 的 OnNavSelectionChanged 分发；
+                    **Tag 的字面值必须与 Services/NavigationService.cs 的 RouteKeys 保持一致**
+                    （XAML 引用不到 C# 常量，这是唯一的重复点，改路由键时两处一起改）。
+
+                    图标是 Segoe Fluent Icons 字形，不引入 SVG 资产；颜色一律跟随框架主题
+                    （FontIcon 默认用主文字色），不要写死 hex。
+                -->
+                <muxc:NavigationView.MenuItems>
+                    <muxc:NavigationViewItem
+                        x:Name="NavInstances"
+                        AutomationProperties.Name="实例"
+                        Content="实例"
+                        Tag="instances">
+                        <muxc:NavigationViewItem.Icon>
+                            <!-- E8FD = List（实例列表） -->
+                            <FontIcon Glyph="&#xE8FD;" />
+                        </muxc:NavigationViewItem.Icon>
+                    </muxc:NavigationViewItem>
+
+                    <muxc:NavigationViewItem
+                        x:Name="NavEngines"
+                        AutomationProperties.Name="引擎版本管理"
+                        Content="引擎版本管理"
+                        Tag="engines">
+                        <muxc:NavigationViewItem.Icon>
+                            <!-- E71D = AllApps：与旧左栏底部入口用的字形一致，避免观感回归 -->
+                            <FontIcon Glyph="&#xE71D;" />
+                        </muxc:NavigationViewItem.Icon>
+                    </muxc:NavigationViewItem>
+
+                    <muxc:NavigationViewItem
+                        x:Name="NavSettings"
+                        AutomationProperties.Name="全局设置"
+                        Content="全局设置"
+                        Tag="settings">
+                        <muxc:NavigationViewItem.Icon>
+                            <!-- E713 = Setting：标准齿轮（手写多边形路径画不准，用户指出过） -->
+                            <FontIcon Glyph="&#xE713;" />
+                        </muxc:NavigationViewItem.Icon>
+                    </muxc:NavigationViewItem>
+                </muxc:NavigationView.MenuItems>
+
+                <!-- 底部固定「关于」（决策 D4；方案 A：独立页面，因此有选中态） -->
+                <muxc:NavigationView.FooterMenuItems>
+                    <muxc:NavigationViewItem
+                        x:Name="NavAbout"
+                        AutomationProperties.Name="关于 WhalesLauncher"
+                        Content="关于"
+                        Tag="about">
+                        <muxc:NavigationViewItem.Icon>
+                            <!-- E946 = Info -->
+                            <FontIcon Glyph="&#xE946;" />
+                        </muxc:NavigationViewItem.Icon>
+                    </muxc:NavigationViewItem>
+                </muxc:NavigationView.FooterMenuItems>
 
                 <!-- 内容层（规范 §3.3）：Mica 之上铺一层 LayerFillColorDefaultBrush -->
                 <Grid Background="{ThemeResource LayerFillColorDefaultBrush}">

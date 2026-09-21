@@ -73,9 +73,51 @@ interface ResolvedCommand {
 }
 
 /**
+ * 额外命令搜索目录（**排在 `PATH` 之前**）。
+ *
+ * ### 为什么需要它（真实场景）
+ * 首次启动自检在 `PATH` 上没有 Node.js 时会下载一份**便携版 Node**到
+ * `<root>/runtime/node/`（见 `src/core/node-provision.ts`）。那份发行版自带
+ * `npm.cmd` + `node_modules/npm`，但它**不在系统 `PATH` 上**：C# 宿主是用绝对路径
+ * 把侧车进程拉起来的，因此 `resolveCommand('npm', …)` 会在 `PATH` 里一无所获，
+ * 于是「装引擎 / 装插件 / 查版本」全部失败 —— 明明运行时就在手边。
+ *
+ * 由 `node-runtime.ts` 在**探针判定成功后**登记运行时所在目录（它是唯一确知"哪个
+ * node 真的可用"的地方），`paths.ts` 再把它注入子进程 `PATH`，让 dsh 拉起的
+ * 孙进程（pnpm / 插件自己的 npm 调用）也能找到同一份运行时。
+ */
+const extraCommandDirs: string[] = [];
+
+/**
+ * 登记额外命令搜索目录（覆盖式；传空数组即清空）。
+ * @param dirs 目录列表（相对路径会被丢弃：子进程 cwd 不可控）。
+ */
+export function setExtraCommandDirs(dirs: readonly string[]): void {
+  extraCommandDirs.length = 0;
+  const seen = new Set<string>();
+  for (const dir of dirs) {
+    if (typeof dir !== 'string' || dir.trim().length === 0) continue;
+    if (!path.isAbsolute(dir)) continue;
+    const key = process.platform === 'win32' ? dir.toLowerCase() : dir;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    extraCommandDirs.push(dir);
+  }
+}
+
+/**
+ * 当前登记的额外命令搜索目录（快照，供 `paths.ts` 注入子进程环境）。
+ * @returns 目录数组副本。
+ */
+export function extraCommandDirsSnapshot(): string[] {
+  return [...extraCommandDirs];
+}
+
+/**
  * 解析 Windows 上的命令垫片。
  *
- * 非 Windows 或命令已含路径分隔符时原样返回；否则按 `PATH` + `PATHEXT` 查找真实文件。
+ * 非 Windows 或命令已含路径分隔符时原样返回；否则按 `{@link extraCommandDirs}` + `PATH`
+ * + `PATHEXT` 查找真实文件（额外目录优先，见该常量的说明）。
  * @param command 命令名或路径。
  * @param args 原始参数。
  * @returns 可直接 spawn 的文件与参数。
@@ -83,7 +125,10 @@ interface ResolvedCommand {
 export function resolveCommand(command: string, args: string[]): ResolvedCommand {
   if (process.platform !== 'win32' || /[\\/]/.test(command)) return { file: command, args };
   const exts = (process.env['PATHEXT'] ?? '.COM;.EXE;.BAT;.CMD').split(';').filter(Boolean);
-  const dirs = (process.env['PATH'] ?? '').split(path.delimiter).filter(Boolean);
+  const dirs = [
+    ...extraCommandDirs,
+    ...(process.env['PATH'] ?? '').split(path.delimiter).filter(Boolean),
+  ];
   for (const dir of dirs) {
     for (const ext of exts) {
       const candidate = path.join(dir, `${command}${ext.toLowerCase()}`);

@@ -1,8 +1,8 @@
 {
   "schema": "whaleslauncher.ui-test-report/1",
-  "generatedAt": "2026-09-21T12:22:30.371Z",
-  "startedAt": "2026-09-21T12:20:19.431Z",
-  "durationMs": 130940,
+  "generatedAt": "2026-09-21T15:10:06.809Z",
+  "startedAt": "2026-09-21T15:06:51.178Z",
+  "durationMs": 195631,
   "framework": {
     "driver": "PowerShell 5.1 + 内置 UI Automation（UIAutomationClient / UIAutomationTypes）",
     "capture": "scripts/audit/capture-core.ps1 的 [WinAuditCore]（PrintWindow PW_RENDERFULLCONTENT + ImageStats）",
@@ -14,7 +14,7 @@
     "bridge": "F:\\WhalesLauncher\\dist\\bridge\\server.cjs",
     "node": "v26.3.0",
     "platform": "win32 10.0.26200",
-    "tmpHome": "F:\\Temp\\whales-ui-test-ht6XaR"
+    "tmpHome": "F:\\Temp\\whales-ui-test-KMNxyw"
   },
   "expectations": {
     "instanceCount": 3,
@@ -33,8 +33,8 @@
       "0.0.1-uitest.1",
       "0.0.1-uitest"
     ],
-    "noEngineHomeDir": "F:\\Temp\\whales-ui-test-UmVS6k",
-    "emptyHomeDir": "F:\\Temp\\whales-ui-test-UaHPG2",
+    "noEngineHomeDir": "F:\\Temp\\whales-ui-test-9mvaDx",
+    "emptyHomeDir": "F:\\Temp\\whales-ui-test-EfZ7z5",
     "firstInstanceName": "UI Alpha",
     "firstInstanceDir": "ui-alpha",
     "firstInstanceId": "ui-fixture-0001",
@@ -45,8 +45,8 @@
     "fixtureEngineVersion": "0.0.1-uitest"
   },
   "totals": {
-    "total": 69,
-    "passed": 68,
+    "total": 73,
+    "passed": 72,
     "failed": 0,
     "unverifiable": 1,
     "errored": 0
@@ -56,28 +56,28 @@
       "page": "shell",
       "title": "外壳（标题栏 / 左栏 / 应用菜单 / 日志抽屉 / 主题）",
       "route": "instances",
-      "startedAt": "2026-09-21T12:20:19.8891796Z",
-      "durationMs": 9846,
+      "startedAt": "2026-09-21T15:06:51.6676797Z",
+      "durationMs": 24105,
       "error": null,
       "infrastructure": false,
-      "total": 9,
-      "passed": 9,
+      "total": 11,
+      "passed": 11,
       "failed": 0,
       "unverifiable": 0,
       "checks": [
         {
           "Id": "SH-01",
-          "Title": "左栏实例项数量与后端实例数一致",
+          "Title": "左栏不再重复显示实例列表（功能去重的回归保护）",
           "Kind": "existence",
           "Status": "pass",
-          "Detail": "backend=3 rail=3 railTexts=15"
+          "Detail": "backend=3 instance names found in the rail=0 (expected 0) railTexts=3"
         },
         {
           "Id": "SH-02",
-          "Title": "左栏固定入口（新建实例 / 引擎版本管理 / 全局设置）齐全",
+          "Title": "左栏功能项齐全（实例 / 引擎版本管理 / 全局设置 / 关于）",
           "Kind": "existence",
           "Status": "pass",
-          "Detail": "found 3/3 of the rail entry labels (navTexts=82)"
+          "Detail": "found 4/4 rail entries by exact UIA name; missing=[]"
         },
         {
           "Id": "SH-03",
@@ -123,14 +123,29 @@
         },
         {
           "Id": "SH-09",
-          "Title": "左栏实例筛选框可读写",
+          "Title": "左栏筛选框已移除（实例搜索只在实例页内）",
+          "Kind": "existence",
+          "Status": "pass",
+          "Detail": "InstanceFilter present=False (expected absent)"
+        },
+        {
+          "Id": "SH-10",
+          "Title": "左栏可在功能页与实例页之间互跳（旧左栏没有实例入口的回归保护）",
           "Kind": "behavior",
           "Status": "pass",
-          "Detail": "wrote 'zz', readback='zz'"
+          "Detail": "engines selected=True; back to instances=True"
+        },
+        {
+          "Id": "SH-11",
+          "Title": "左栏底部「关于」是可导航页面（不是弹框），且能回到实例页",
+          "Kind": "behavior",
+          "Status": "pass",
+          "Detail": "subtitle became '关于'=True; back to instances=True"
         }
       ],
       "diagnostics": [
-        "pid=25720 hwnd=8064498 class=WinUIDesktopWin32WindowClass route=instances"
+        "pid=52472 hwnd=18091968 class=WinUIDesktopWin32WindowClass route=instances",
+        "smokeRoute='instances' ctxRoute='instances' otherWhalesProcs=0"
       ],
       "exitCode": 0,
       "timedOut": false,
@@ -140,12 +155,12 @@
       "page": "p1-instances",
       "title": "P1 实例列表",
       "route": "instances",
-      "startedAt": "2026-09-21T12:20:29.7417747Z",
-      "durationMs": 17996,
+      "startedAt": "2026-09-21T15:07:15.7880520Z",
+      "durationMs": 27551,
       "error": null,
       "infrastructure": false,
-      "total": 10,
-      "passed": 10,
+      "total": 12,
+      "passed": 12,
       "failed": 0,
       "unverifiable": 0,
       "checks": [
@@ -189,7 +204,7 @@
           "Title": "卡片\"更多\"菜单可展开且含预期菜单项",
           "Kind": "behavior",
           "Status": "pass",
-          "Detail": "flyout opened=True, expected items found 7/7"
+          "Detail": "attempt 1: flyout opened=True, expected items found 8/8"
         },
         {
           "Id": "P1-07",
@@ -218,10 +233,24 @@
           "Kind": "behavior",
           "Status": "pass",
           "Detail": "cards after refresh = 3 (backend 3)"
+        },
+        {
+          "Id": "P1-11",
+          "Title": "页头有「导入实例包」入口且可用（实例包导入的界面入口）",
+          "Kind": "existence",
+          "Status": "pass",
+          "Detail": "entry '导入实例包' present=True enabled=True ct=ControlType.Button aid='ImportPackButton'"
+        },
+        {
+          "Id": "P1-12",
+          "Title": "「更多」菜单里的导出项可用（实例包导出的界面入口）",
+          "Kind": "existence",
+          "Status": "pass",
+          "Detail": "entry '导出实例包' present=True (card0 buttons=3 ['重新启动'] ['查看实例详情'] ['更多操作']) enabled=True ct=ControlType.MenuItem offscreen=False"
         }
       ],
       "diagnostics": [
-        "pid=21436 hwnd=10292698 route=instances"
+        "pid=33612 hwnd=13896970 route=instances"
       ],
       "exitCode": 0,
       "timedOut": false,
@@ -231,8 +260,8 @@
       "page": "p2-detail-plugins",
       "title": "P2 实例详情 · 插件",
       "route": "detail/first/plugins",
-      "startedAt": "2026-09-21T12:20:47.7392017Z",
-      "durationMs": 10409,
+      "startedAt": "2026-09-21T15:07:43.3587447Z",
+      "durationMs": 13198,
       "error": null,
       "infrastructure": false,
       "total": 8,
@@ -266,7 +295,7 @@
           "Title": "切换到\"设置\"后内容真的变了",
           "Kind": "behavior",
           "Status": "pass",
-          "Detail": "pluginsMarker before=True after=False; settingsMarker before=False after=True; settings.IsSelected=True; texts 75 -> 82"
+          "Detail": "pluginsMarker before=True after=False; settingsMarker before=False after=True; settings.IsSelected=True; texts 58 -> 65"
         },
         {
           "Id": "P2-06",
@@ -298,7 +327,7 @@
         }
       ],
       "diagnostics": [
-        "pid=36196 hwnd=11930970 route=detail/first/plugins"
+        "pid=47492 hwnd=11143932 route=detail/first/plugins"
       ],
       "exitCode": 0,
       "timedOut": false,
@@ -308,8 +337,8 @@
       "page": "p3-detail-settings",
       "title": "P3 实例详情 · 设置",
       "route": "detail/first/settings",
-      "startedAt": "2026-09-21T12:20:58.1683946Z",
-      "durationMs": 5466,
+      "startedAt": "2026-09-21T15:07:56.5481999Z",
+      "durationMs": 6101,
       "error": null,
       "infrastructure": false,
       "total": 7,
@@ -368,7 +397,7 @@
         }
       ],
       "diagnostics": [
-        "pid=40480 hwnd=16255966 route=detail/first/settings"
+        "pid=36948 hwnd=6033234 route=detail/first/settings"
       ],
       "exitCode": 0,
       "timedOut": false,
@@ -378,8 +407,8 @@
       "page": "p4-detail-saves",
       "title": "P4 实例详情 · 存档",
       "route": "detail/first/saves",
-      "startedAt": "2026-09-21T12:21:03.6185534Z",
-      "durationMs": 19413,
+      "startedAt": "2026-09-21T15:08:02.6532730Z",
+      "durationMs": 19754,
       "error": null,
       "infrastructure": false,
       "total": 6,
@@ -431,7 +460,7 @@
         }
       ],
       "diagnostics": [
-        "pid=39532 hwnd=14945524 route=detail/first/saves"
+        "pid=18112 hwnd=11537148 route=detail/first/saves"
       ],
       "exitCode": 0,
       "timedOut": false,
@@ -441,8 +470,8 @@
       "page": "p5-detail-logs",
       "title": "P5 实例详情 · 日志",
       "route": "detail/first/logs",
-      "startedAt": "2026-09-21T12:21:23.0256043Z",
-      "durationMs": 14766,
+      "startedAt": "2026-09-21T15:08:22.3947411Z",
+      "durationMs": 15070,
       "error": null,
       "infrastructure": false,
       "total": 6,
@@ -494,7 +523,7 @@
         }
       ],
       "diagnostics": [
-        "pid=47412 hwnd=12193114 route=detail/first/logs"
+        "pid=38844 hwnd=16386768 route=detail/first/logs"
       ],
       "exitCode": 0,
       "timedOut": false,
@@ -504,8 +533,8 @@
       "page": "p6-engines",
       "title": "P6 引擎版本管理",
       "route": "engines",
-      "startedAt": "2026-09-21T12:21:37.7934685Z",
-      "durationMs": 30208,
+      "startedAt": "2026-09-21T15:09:07.2892013Z",
+      "durationMs": 30129,
       "error": null,
       "infrastructure": false,
       "total": 7,
@@ -564,18 +593,18 @@
         }
       ],
       "diagnostics": [
-        "pid=36360 hwnd=11209556 route=engines"
+        "pid=47688 hwnd=4721948 route=engines"
       ],
       "exitCode": 0,
       "timedOut": false,
-      "attempts": 1
+      "attempts": 2
     },
     {
       "page": "p7-wizard",
       "title": "P7 创建实例向导",
       "route": "create",
-      "startedAt": "2026-09-21T12:22:08.0084461Z",
-      "durationMs": 13029,
+      "startedAt": "2026-09-21T15:09:37.4529643Z",
+      "durationMs": 17560,
       "error": null,
       "infrastructure": false,
       "total": 8,
@@ -630,7 +659,7 @@
           "Title": "输入合法名后错误消失、目录名预览出现",
           "Kind": "behavior",
           "Status": "pass",
-          "Detail": "name='UI Wizard Probe' errorCleared=True DirPreview='UI-Wizard-Probe'"
+          "Detail": "name='UI Wizard Probe' errorCleared=True DirPreview='fenUI-Wizard-Probe'"
         },
         {
           "Id": "P7-02",
@@ -641,7 +670,7 @@
         }
       ],
       "diagnostics": [
-        "pid=48796 hwnd=11275092 launchRoute=create",
+        "pid=54052 hwnd=3673902 launchRoute=create",
         "create wizard reached via deep link"
       ],
       "exitCode": 0,
@@ -652,8 +681,8 @@
       "page": "p8-settings",
       "title": "P8 全局设置",
       "route": "settings",
-      "startedAt": "2026-09-21T12:22:21.0310900Z",
-      "durationMs": 9709,
+      "startedAt": "2026-09-21T15:09:55.0043505Z",
+      "durationMs": 12208,
       "error": null,
       "infrastructure": false,
       "total": 8,
@@ -701,7 +730,7 @@
           "Title": "存储位置路径与 registry 输入框可读",
           "Kind": "existence",
           "Status": "pass",
-          "Detail": "PrimaryHomeBox='C:\\Users\\jcgfw\\.dsh' ; RootDirBox='F:\\Temp\\whales-ui-test-ht6XaR' ; RegistryBox='https://registry.npmjs.org'"
+          "Detail": "PrimaryHomeBox='C:\\Users\\jcgfw\\.dsh' ; RootDirBox='F:\\Temp\\whales-ui-test-KMNxyw' ; RegistryBox='https://registry.npmjs.org'"
         },
         {
           "Id": "P8-06",
@@ -715,11 +744,11 @@
           "Title": "版本号文案可读",
           "Kind": "existence",
           "Status": "pass",
-          "Detail": "NodeConclusion='使用 C:\\Program Files\\nodejs\\node.exe（Node v26.3.0，来源：启动器自身进程）' Version='启动器版本 1.0.0'"
+          "Detail": "NodeConclusion='使用 C:\\Program Files\\nodejs\\node.exe（Node v26.3.0，来源：启动器自身进程）' Version='启动器版本 1.0.1'"
         }
       ],
       "diagnostics": [
-        "pid=44320 hwnd=16583646 launchRoute=settings",
+        "pid=52424 hwnd=11931490 launchRoute=settings",
         "global settings reached via deep link"
       ],
       "exitCode": 0,

@@ -262,3 +262,48 @@ export function sanitizeFileName(name) {
   const cleaned = name.replace(/[\\/:*?"<>|]/g, '_').trim();
   return cleaned.length > 0 ? cleaned : 'instance';
 }
+
+/* ------------------------------------------------------------------ *
+ * 环境自检（**新增通道**，来源是新契约而非旧主进程）
+ *
+ * 本节**不是**从 ipc.ts 搬运的：旧实现里没有环境自检，对应契约是
+ * `src/shared/contracts.ts` 的 `PreflightOptions`（`CH.launcher.preflight`）。
+ * 校验原则与既有各条完全一致：**只放行契约列出的字段**，未知字段直接报错 ——
+ * 这些开关能让 core 联网下载并安装依赖，绝不能把渲染层传来的任意对象原样透传。
+ * ------------------------------------------------------------------ */
+
+/** 自检选项的字段白名单 → 期望类型。 */
+const PREFLIGHT_KEYS = new Map([
+  ['autoFix', 'boolean'],
+  ['installEngine', 'boolean'],
+  ['checkNetwork', 'boolean'],
+  ['refreshRuntime', 'boolean'],
+  ['registry', 'string'],
+]);
+
+/**
+ * 校验自检选项。
+ *
+ * 未提供 / 传 `null` 都表示"按默认选项自检"（默认只做本地自动修复，不联网）。
+ * @param raw 原始值（当未知数据处理）。
+ * @returns 校验后的选项对象（只含白名单字段）。
+ * @throws {AppError} 出现未知字段，或字段类型不符。
+ */
+export function parsePreflightOptions(raw) {
+  if (raw === undefined || raw === null) return {};
+  const source = mustRecord(raw, '自检选项');
+  const options = {};
+  for (const key of Object.keys(source)) {
+    const expected = PREFLIGHT_KEYS.get(key);
+    if (expected === undefined) throw new AppError(`不支持的自检选项：${key}。`);
+    const value = source[key];
+    if (value === undefined) continue;
+    if (expected === 'boolean') {
+      options[key] = mustBoolean(value, `自检选项 ${key}`);
+      continue;
+    }
+    // registry 允许空串：语义是"用全局配置里的地址"（core 侧会归一化后回退）
+    options[key] = optionalString(value, `自检选项 ${key}`);
+  }
+  return options;
+}

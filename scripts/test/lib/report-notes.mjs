@@ -77,13 +77,14 @@ export const KNOWN_DEFECTS = [
     id: 'DEFECT-3',
     title: '列表卡片 / 左栏项的 UIA `Name` 是 CLR 类型名而不是显示文字',
     severity: '低（可访问性问题，且让元素定位变脆）',
-    status: '未修（登记给渲染层负责人）',
+    status: '**左栏那一半已随左栏改造消失**；实例卡片那一半仍未修',
     evidence: [
-      '实例卡片容器：`ControlType.ListItem` + `name=\'WhalesLauncher.Views.InstanceCard\'`；左栏行：`name=\'WhalesLauncher.Shell.RailEntry\'`。',
-      '可见文字（实例名、状态、路径）都在子 TextBlock 上。屏幕阅读器读到的是类型名，不是"UI Alpha，已停止"。',
-      '建议：给 `GridViewItem` / `NavigationViewItem` 设 `AutomationProperties.Name="{x:Bind DisplayName}"`（或在 `InstanceCard` / `RailEntry` 上实现 `ToString()`）。',
+      '实例卡片容器：`ControlType.ListItem` + `name=\'WhalesLauncher.Views.InstanceCard\'`；~~左栏行：`name=\'WhalesLauncher.Shell.RailEntry\'`~~（该数据类型已随左栏改造删除）。',
+      '左栏那一半是**自动**消解的：左栏改为静态 `NavigationViewItem` 后每项都显式写了 `AutomationProperties.Name`（实例 / 引擎版本管理 / 全局设置 / 关于 WhalesLauncher），UIA 名字就是可见文字 —— 不再有"类型名当名字"的可能。',
+      '实例卡片那一半仍然成立：可见文字（实例名、状态、路径）都在子 TextBlock 上，屏幕阅读器读到的是类型名，不是"UI Alpha，已停止"。',
+      '建议：给 `GridViewItem` 设 `AutomationProperties.Name="{x:Bind DisplayName}"`（或在 `InstanceCard` 上实现 `ToString()`）。',
     ],
-    impactOnSuite: '用例因此改用「读子节点文本」定位卡片与左栏行，而不是按 Name 匹配；这也是为什么左栏实例数断言写成"名字出现在左栏文本集合里"。',
+    impactOnSuite: '左栏断言现在**按 `AutomationProperties.Name` 精确定位**（SH-02 对四项逐一精确匹配），不再依赖"文本出现在子树里"；实例卡片相关断言仍必须读子节点文本，这也是 P1 用例偏长的原因。',
   },
   {
     id: 'DEFECT-4',
@@ -111,7 +112,7 @@ export const ENVIRONMENT_HAZARDS = [
 ];
 
 export const FOLLOW_UPS = [
-  '1. **给 `InstanceCard` / `RailEntry` 补 `AutomationProperties.Name`**（DEFECT-3）：既修可访问性，也让元素定位从"读子节点"回到"按名字找"，用例会更稳更短。',
+  '1. **给 `InstanceCard` 补 `AutomationProperties.Name`**（DEFECT-3 的剩余部分；左栏那一半已随左栏改造消失）：既修可访问性，也让元素定位从"读子节点"回到"按名字找"，P1 用例会更稳更短。',
   '2. **专项确认行号列**（DEFECT-4）：加一个"编辑内容 → 等 500ms → 读 `Gutter`"的用例，把"采样时机"与"同步缺陷"区分开。',
   '3. **补 `ContentDialog` 覆盖**：本套用例刻意回避了会弹确认框的破坏性操作（删除实例等）。要覆盖需要一套"点了取消/确认再恢复现场"的用例。',
   '4. **像素级断言按需接入**：驱动已经提供 `Save-Shot` / `Get-ImageStats` / `Compare-Image`（复用 `[WinAuditCore]` 的 PrintWindow 链路），当前用例未使用，因为像素断言在主题/字体/DPI 变化下噪音大。真正需要"变了没有"的场合（如主题切换、抽屉动效）再补。',

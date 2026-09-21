@@ -67,6 +67,13 @@ public sealed partial class InstanceSettingsView : UserControl
     /// <summary>当前实例 id；删除实例后为 <c>null</c>。</summary>
     public string? InstanceId => _instance?.Meta.Id;
 
+    /// <summary>
+    /// 面包屑点击：第 0 段「实例」回实例列表、第 1 段（实例名）回本实例的默认页签、
+    /// 末段（当前页名）不跳转 —— 段位语义与理由见 <see cref="DetailBreadcrumb.OnItemClicked"/>。
+    /// </summary>
+    private void OnCrumbItemClicked(BreadcrumbBar sender, BreadcrumbBarItemClickedEventArgs args) =>
+        DetailBreadcrumb.OnItemClicked(args, InstanceId);
+
     /* ------------------------------------------------------------------ *
      * 装载
      * ------------------------------------------------------------------ */

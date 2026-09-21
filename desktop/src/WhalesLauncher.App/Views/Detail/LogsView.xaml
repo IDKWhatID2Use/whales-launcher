@@ -32,7 +32,8 @@
 
             <muxc:BreadcrumbBar
                 x:Name="Crumb"
-                Grid.Column="0" />
+                Grid.Column="0"
+                ItemClicked="OnCrumbItemClicked" />
 
             <StackPanel
                 Grid.Column="1"

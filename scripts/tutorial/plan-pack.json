@@ -1,0 +1,37 @@
+{
+  "schema": "whaleslauncher.tutorial.plan/1",
+  "description": "Instance-pack import/export entries on the instance list page (batch: pack). Produces the two screenshots for docs/guide/03-instances.md section 6: the page-header import entry, and the per-card 'more' menu that now carries 'export instance pack'. Everything is driven through UIA on the same isolated demo home the other batches use; nothing here launches an instance or opens a file dialog.",
+  "exe": "F:\\WhalesLauncher\\desktop\\src\\WhalesLauncher.App\\bin\\Debug\\net10.0-windows10.0.26100.0\\win-x64\\WhalesLauncher.exe",
+  "home": "F:\\Temp\\whales-tutorial-home",
+  "outDir": "F:\\WhalesLauncher\\docs\\assets\\tutorial",
+  "sessions": [
+    {
+      "id": "pack-entries",
+      "route": "instances",
+      "waitMs": 10000,
+      "shots": [
+        {
+          "name": "21-import-pack",
+          "steps": [
+            { "Type": "wait", "Ms": 1500 },
+            { "Type": "uia", "Action": "info", "Ct": "Button", "Name": "导入实例包", "TimeoutMs": 5000 },
+            { "Type": "uia", "Action": "dump" }
+          ]
+        },
+        {
+          "name": "24-export-pack",
+          "mode": "screen",
+          "baseline": "01-instance-list",
+          "steps": [
+            { "Type": "focus" },
+            { "Type": "wait", "Ms": 1200 },
+            { "Type": "uia", "Action": "dump" },
+            { "Type": "uia", "Action": "invoke", "Ct": "Button", "Name": "更多操作", "Index": 0, "TimeoutMs": 5000, "AfterMs": 3000 },
+            { "Type": "uia", "Action": "windows" },
+            { "Type": "uia", "Action": "dump" }
+          ]
+        }
+      ]
+    }
+  ]
+}

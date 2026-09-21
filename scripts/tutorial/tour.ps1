@@ -529,13 +529,11 @@ function Find-UiaElement {
 
     if ($wantCt -and $wantCt -notlike 'ControlType.*') { $wantCt = 'ControlType.' + $wantCt }
 
-    # Only server-side filterable fields go into the condition; NameLike, Class
-    # and ChildName stay client-side because UIA has no substring condition and
-    # no "has a descendant named X" condition.
-    $serverName = $null
-    if ($wantName -and -not $wantLike) { $serverName = $wantName }
-    $cond = New-UiaCondition -WantPid $wantPid -WantName $serverName -WantAid $wantAid -WantCt $wantCt
-    $childCond = New-UiaCondition -WantName $wantChild
+    # Only Substring/Class/ChildName-free filtering is left to the caller; the
+    # old server-side condition (New-UiaCondition over Pid/Name/Aid/Ct) is gone
+    # together with the single FindAll call it used to feed - every field is
+    # filtered client-side below, and a FULL traversal is the only way to see the
+    # whole window (see Get-UiaCandidates).
 
     $deadline = (Get-Date).AddMilliseconds([Math]::Max(0, $TimeoutMs))
     $matches = @()
@@ -544,11 +542,8 @@ function Find-UiaElement {
         $root = $null
         try { $root = Get-UiaRoot -Hwnd $Hwnd -Scope $scope } catch { $root = $null }
         if ($null -ne $root) {
-            $found = $null
-            try {
-                $found = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $cond)
-            } catch { $found = $null }
-            if ($null -ne $found) {
+            $found = @(Get-UiaCandidates -Root $root)
+            if ($found.Count -gt 0) {
                 foreach ($el in $found) {
                     $info = Get-UiaElementCurrent -Element $el
                     if ($null -eq $info) { continue }
@@ -560,8 +555,21 @@ function Find-UiaElement {
                     if ($wantCt -and $info.Ct -ne $wantCt) { continue }
                     if ($wantClass -and ($null -eq $info.Class -or $info.Class.IndexOf($wantClass, [System.StringComparison]::OrdinalIgnoreCase) -lt 0)) { continue }
                     if ($wantChild) {
+                        # "has a descendant named X" OR "is itself named X".
+                        # The second form matters since the rail went static: a
+                        # NavigationViewItem with a plain string Content promotes
+                        # that text to its OWN UIA name and no longer exposes a
+                        # child TextBlock, so a pure descendant probe stopped
+                        # matching 引擎版本管理 / 全局设置.
                         $hit = $null
-                        try { $hit = $el.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $childCond) } catch { $hit = $null }
+                        if ($info.Name -eq $wantChild) {
+                            $hit = $el
+                        } else {
+                            foreach ($sub in @(Get-UiaCandidates -Root $el -Max 300)) {
+                                $subInfo = Get-UiaElementCurrent -Element $sub
+                                if ($null -ne $subInfo -and $subInfo.Name -eq $wantChild) { $hit = $sub; break }
+                            }
+                        }
                         if ($null -eq $hit) { continue }
                     }
                     $matches += $info
@@ -572,6 +580,75 @@ function Find-UiaElement {
         if ((Get-Date) -ge $deadline) { return $null }
         Start-Sleep -Milliseconds 350
     }
+}
+
+function Get-UiaCandidates {
+    <# Every descendant of a scope, MERGED from the provider's FindAll and an
+       explicit TreeWalker walk, deduped by runtime id.
+
+       Why not just FindAll: it is NOT guaranteed to cover the whole window for
+       this app. Measured when regenerating the guide screenshots (21 Sep): the
+       rail lookup "ListItem with a child named 引擎版本管理" found NOTHING, the
+       click silently did not happen, and 17-engines.png captured the INSTANCE
+       LIST instead of the engines page - a wrong screenshot is worse than an
+       old one. The control-view walk from the same root reached the rail items
+       fine. Same defect and same fix as scripts/test/UiDriver.psm1.
+
+       The walk is bounded (Max, and a per-parent sibling guard) because tour.ps1
+       runs it inside a polling loop. #>
+    param($Root, [int]$Max = 4000)
+
+    $list = New-Object System.Collections.Generic.List[object]
+    $seen = New-Object 'System.Collections.Generic.HashSet[string]'
+
+    $found = $null
+    try {
+        $found = $Root.FindAll(
+            [System.Windows.Automation.TreeScope]::Descendants,
+            [System.Windows.Automation.Condition]::TrueCondition)
+    } catch {
+        $found = $null
+    }
+    if ($null -ne $found) {
+        foreach ($el in $found) {
+            if ($list.Count -ge $Max) { break }
+            $list.Add($el)
+            try { [void]$seen.Add([string]::Join(',', $el.GetRuntimeId())) } catch { }
+        }
+    }
+
+    # Walk BOTH views: the control view is what users see, but this app has
+    # controls whose children exist ONLY in the raw view - the instance-detail
+    # SelectorBar ('TabBar') is the documented case, and without it every
+    # "select the 设置 tab" step silently did nothing (12/13/14-detail-*.png all
+    # came out as the plugins tab). Dedupe by runtime id keeps the union honest.
+    $walkers = @(
+        [System.Windows.Automation.TreeWalker]::ControlViewWalker,
+        [System.Windows.Automation.TreeWalker]::RawViewWalker
+    )
+    foreach ($walk in $walkers) {
+        $queue = New-Object System.Collections.Generic.Queue[object]
+        $queue.Enqueue($Root)
+        while ($queue.Count -gt 0 -and $list.Count -lt $Max) {
+            $cur = $queue.Dequeue()
+            try { $child = $walk.GetFirstChild($cur) } catch { $child = $null }
+            $guard = 0
+            while ($null -ne $child -and $guard -lt 2000) {
+                $guard++
+                $key = ''
+                try { $key = [string]::Join(',', $child.GetRuntimeId()) } catch { $key = '' }
+                $isNew = $true
+                if ($key) { $isNew = $seen.Add($key) }
+                if ($isNew) {
+                    $list.Add($child)
+                    $queue.Enqueue($child)
+                }
+                if ($list.Count -ge $Max) { break }
+                try { $child = $walk.GetNextSibling($child) } catch { $child = $null }
+            }
+        }
+    }
+    return $list.ToArray()
 }
 
 function Get-UiaPattern {
@@ -615,6 +692,18 @@ function Invoke-UiaAction {
             try { $p.ScrollIntoView(); return 'scrollintoview-ok' } catch { return 'scrollintoview-failed: ' + $_.Exception.Message }
         }
         'clickcenter' {
+            # Patterns FIRST, coordinate click only as the last resort - the same
+            # rule the 'invoke' branch below already follows. A raw centre click
+            # needs SetForegroundWindow to have actually worked, and on this
+            # machine it silently does not (documented for shot 24 in
+            # docs/assets/tutorial/CORRESPONDENCE.md). That is how
+            # "click 引擎版本管理" became "click nothing": the step reported no
+            # error, and 17-engines.png captured the INSTANCE LIST - a confidently
+            # wrong screenshot, the worst possible outcome for a guide image.
+            $p = Get-UiaPattern -Element $Info.Element -Pattern ([System.Windows.Automation.InvokePattern]::Pattern)
+            if ($null -ne $p) { try { $p.Invoke(); return 'invoke-ok' } catch { } }
+            $p = Get-UiaPattern -Element $Info.Element -Pattern ([System.Windows.Automation.SelectionItemPattern]::Pattern)
+            if ($null -ne $p) { try { $p.Select(); return 'select-ok' } catch { } }
             return (Invoke-UiaClickCenter -Info $Info -Hwnd $Hwnd -Button 'left')
         }
         'rightclick' {

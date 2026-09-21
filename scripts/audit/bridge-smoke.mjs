@@ -26,9 +26,9 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'
 const bridgeEntry = path.join(repoRoot, 'dist', 'bridge', 'server.cjs');
 const keepTemp = process.argv.includes('--keep');
 
-/** 契约 `CH` 的 39 条通道字面值（冻结值，独立于实现硬编码以形成交叉校验）。 */
+/** 契约 `CH` 的 40 条通道字面值（冻结值，独立于实现硬编码以形成交叉校验）。 */
 const EXPECTED_CHANNELS = [
-  'launcher:getConfig', 'launcher:setConfig', 'launcher:detectNode',
+  'launcher:getConfig', 'launcher:setConfig', 'launcher:detectNode', 'launcher:preflight',
   'instance:list', 'instance:create', 'instance:get', 'instance:update',
   'instance:remove', 'instance:launch', 'instance:stop', 'instance:openFolder',
   'engine:list', 'engine:available', 'engine:install', 'engine:remove',

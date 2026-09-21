@@ -81,7 +81,7 @@ jobs:
       - name: TypeScript typecheck
         run: npm run typecheck
 
-      - name: Bridge smoke test (NDJSON protocol, 141 assertions)
+      - name: Bridge smoke test (NDJSON protocol; asserts the full CH channel list)
         run: npm run smoke:bridge
 
       - name: Core unit tests

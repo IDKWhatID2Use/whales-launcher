@@ -56,37 +56,61 @@ function Test-TextPresent {
 try {
     $app = Start-WhalesApp -Root $ctx.home -Route $ctx.route -Exe $ctx.exe -LogDir $ctx.logDir
     Add-UiDiagnostic -Case $case -Text "pid=$($app.Pid) hwnd=$($app.Hwnd) class=$($app.ClassName) route=$($ctx.route)"
+    # Environment record: WHALES_SMOKE_ROUTE is a PROCESS variable set by
+    # Start-WhalesApp, so if anything upstream leaked a different value into this
+    # process the app would silently open a different page. Recorded here because
+    # a run was observed where the title-bar subtitle was the About page's on the
+    # FIRST assertion (SH-08) with no click involved.
+    $otherApps = @(Get-Process -Name 'WhalesLauncher' -ErrorAction SilentlyContinue | Where-Object { $_.Id -ne $app.Pid })
+    Add-UiDiagnostic -Case $case -Text "smokeRoute='$($env:WHALES_SMOKE_ROUTE)' ctxRoute='$($ctx.route)' otherWhalesProcs=$($otherApps.Count)"
 
     $root = Get-UiRoot -Hwnd $app.Hwnd
 
     # ---------------------------------------------------------------- SH-01
-    # Rail instance rows: counted by matching the backend instance names that
-    # the rail is supposed to display. No user-machine name is hardcoded - the
-    # names come from instance:list inside the temp home.
+    # The rail no longer carries the instance list. This is a NEGATIVE assertion
+    # on purpose: the same data used to be rendered twice on screen (rail rows +
+    # the instance card grid), which is exactly the duplication the user asked
+    # us to remove. Keeping it negative makes this the regression guard for that
+    # fix - if instance rows ever come back to the rail, this check goes red.
     $navHost = Find-ByAutomationId -Id 'MenuItemsHost' -Scope $root -Exact
     $railNames = @(Get-TextsUnder -Scope $navHost)
     $matched = 0
     foreach ($name in $ctx.expect.instanceNames) {
         if ($railNames -contains $name) { $matched++ }
     }
-    Add-UiCheck -Case $case -Id 'SH-01' -Title $C.'SH-01' -Kind 'existence' -Ok ($matched -eq $ctx.expect.instanceCount) `
-        -Detail "backend=$($ctx.expect.instanceCount) rail=$matched railTexts=$($railNames.Count)"
+    Add-UiCheck -Case $case -Id 'SH-01' -Title $C.'SH-01' -Kind 'existence' -Ok ($matched -eq 0) `
+        -Detail "backend=$($ctx.expect.instanceCount) instance names found in the rail=$matched (expected 0) railTexts=$($railNames.Count)"
 
     # ---------------------------------------------------------------- SH-02
+    # The rail is a static feature list. Every item carries an explicit
+    # AutomationProperties.Name, so each one is located by its EXACT UIA name;
+    # a "text appears somewhere in the subtree" probe would be ambiguous now
+    # (an instance literally named "实例" would satisfy it for the 实例 entry).
+    # The first three entries live in MenuItems, 关于 lives in FooterMenuItems.
     $navRoot = Find-ByAutomationId -Id 'Nav' -Scope $root -Exact
-    $navTexts = @(Get-TextsUnder -Scope $navRoot)
-    $anchors = @($L.railNewInstance, $L.railEngines, $L.railSettings)
+    $entries = @($L.railEntries)
     $anchorHits = 0
-    foreach ($anchor in $anchors) { if ($navTexts -contains $anchor) { $anchorHits++ } }
-    Add-UiCheck -Case $case -Id 'SH-02' -Title $C.'SH-02' -Kind 'existence' -Ok ($anchorHits -eq $anchors.Count) `
-        -Detail "found $anchorHits/$($anchors.Count) of the rail entry labels (navTexts=$($navTexts.Count))"
+    $missed = @()
+    foreach ($entry in $entries) {
+        if ($null -ne (Find-ByName -Name $entry -Scope $navRoot -Exact -TimeoutMs 2000 -AllowMissing)) {
+            $anchorHits++
+        } else {
+            $missed += $entry
+        }
+    }
+    Add-UiCheck -Case $case -Id 'SH-02' -Title $C.'SH-02' -Kind 'existence' -Ok ($anchorHits -eq $entries.Count) `
+        -Detail "found $anchorHits/$($entries.Count) rail entries by exact UIA name; missing=[$($missed -join ' | ')]"
 
     # ---------------------------------------------------------------- SH-03
     # Behavior: expand the application menu and confirm the menu really opened
     # by looking for a command that only exists inside the flyout.
     $menuOk = $false
     $menuDetail = ''
-    $fileItem = Find-ByName -Name $L.appMenuFile -Scope $root -TimeoutMs 8000 -AllowMissing
+    # Narrow the lookup to ControlType.MenuItem with an EXACT name. A plain
+    # Find-ByName does a case-insensitive SUBSTRING match, so it can now return
+    # an unrelated Text node whose text merely contains the menu caption - and
+    # expanding that node throws (no ExpandCollapsePattern).
+    $fileItem = Find-ByControlType -ControlType 'MenuItem' -NameLike $L.appMenuFile -Exact -Scope $root -TimeoutMs 8000 -AllowMissing
     if ($null -eq $fileItem) {
         $menuDetail = "app menu item '$($L.appMenuFile)' not found"
     } else {
@@ -180,27 +204,84 @@ try {
     $subtitle = Find-ByAutomationId -Id 'PART_SubtitleText' -Scope $root -TimeoutMs 6000 -AllowMissing
     $subtitleText = ''
     if ($subtitle) { $subtitleText = Get-ElementName -Element $subtitle }
+    # On failure, record WHICH page the app is actually on. A run was observed
+    # here where the subtitle was the About page's while WHALES_SMOKE_ROUTE was
+    # 'instances', no rail entry had been clicked yet, and no other
+    # WhalesLauncher process existed - so the evidence has to say which page it
+    # was, not just that the text was wrong.
+    $where = ''
+    if ($subtitleText -ne $L.subtitleInstances) {
+        $gridEl = Find-ByAutomationId -Id $ctx.labels.p1.gridAid -Scope $root -Exact -TimeoutMs 1500 -AllowMissing
+        $aboutEl = Find-ByAutomationId -Id 'LauncherVersionText' -Scope $root -Exact -TimeoutMs 1500 -AllowMissing
+        $navEl = Find-ByAutomationId -Id 'Nav' -Scope $root -Exact -TimeoutMs 1500 -AllowMissing
+        $where = " | onInstancesPage=$($null -ne $gridEl) onAboutPage=$($null -ne $aboutEl) nav=$($null -ne $navEl)"
+    }
     Add-UiCheck -Case $case -Id 'SH-08' -Title $C.'SH-08' -Kind 'existence' -Ok ($subtitleText -eq $L.subtitleInstances) `
-        -Detail "PART_SubtitleText='$subtitleText' expected='$($L.subtitleInstances)'"
+        -Detail "PART_SubtitleText='$subtitleText' expected='$($L.subtitleInstances)'$where"
 
     # ---------------------------------------------------------------- SH-09
-    # Behavior: the rail filter box accepts text (AutoSuggestBox -> inner Edit).
+    # The rail's "filter instances" AutoSuggestBox is gone (decision D3): the
+    # instance page has its own search box, and keeping both would restore the
+    # duplication this whole change removes. Negative assertion by design.
     $filterGroup = Find-ByAutomationId -Id 'InstanceFilter' -Scope $root -TimeoutMs 6000 -AllowMissing
-    $filterOk = $false
-    $filterDetail = 'InstanceFilter not found'
-    if ($filterGroup) {
-        $edit = Find-ByControlType -ControlType 'Edit' -Scope $filterGroup -TimeoutMs 4000 -AllowMissing
-        if ($edit) {
-            $written = Set-ElementValue -Element $edit -Value 'zz'
-            $filterOk = ($written -eq 'zz')
-            $filterDetail = "wrote 'zz', readback='$written'"
-            [void](Set-ElementValue -Element $edit -Value '')
-            Start-Sleep -Milliseconds 700
-        } else {
-            $filterDetail = 'no inner Edit inside InstanceFilter'
-        }
+    Add-UiCheck -Case $case -Id 'SH-09' -Title $C.'SH-09' -Kind 'existence' -Ok ($null -eq $filterGroup) `
+        -Detail "InstanceFilter present=$($null -ne $filterGroup) (expected absent)"
+
+    # ---------------------------------------------------------------- SH-10
+    # Behavior: the old rail had no "instance list" entry, so once the user was
+    # on P6/P7/P8 there was no path back to P1 (registered as a defect in the
+    # hand-over doc). The rail is a feature list now, so 引擎版本管理 -> 实例 must
+    # work in one click. Both directions are checked: the selection state of the
+    # destination item (driven by the router) plus real page content.
+    $railEnginesItem = $null
+    $railInstancesItem = $null
+    $hopOk = $false
+    $hopDetail = 'rail entries not found'
+    if ($navRoot) {
+        $railEnginesItem = Find-ByName -Name $L.railEngines -Scope $navRoot -Exact -TimeoutMs 4000 -AllowMissing
+        $railInstancesItem = Find-ByName -Name $L.railInstances -Scope $navRoot -Exact -TimeoutMs 4000 -AllowMissing
     }
-    Add-UiCheck -Case $case -Id 'SH-09' -Title $C.'SH-09' -Kind 'behavior' -Ok $filterOk -Detail $filterDetail
+    if ($railEnginesItem -and $railInstancesItem) {
+        Select-Element -Element $railEnginesItem
+        $onEngines = Wait-Until -TimeoutMs 20000 -Message 'engines page via rail entry' -Condition {
+            $now = Find-ByAutomationId -Id 'NavEngines' -Scope (Get-UiRoot -Hwnd $app.Hwnd) -Exact -TimeoutMs 500 -AllowMissing
+            if ($null -eq $now) { return $false }
+            return (Get-ElementSelected -Element $now)
+        }
+        Select-Element -Element $railInstancesItem
+        $backToInstances = Wait-Until -TimeoutMs 20000 -Message 'instances page via rail entry' -Condition {
+            $null -ne (Find-ByAutomationId -Id $ctx.labels.p1.gridAid -Scope (Get-UiRoot -Hwnd $app.Hwnd) -Exact -TimeoutMs 500 -AllowMissing)
+        }
+        $hopOk = ($onEngines -and $backToInstances)
+        $hopDetail = "engines selected=$onEngines; back to instances=$backToInstances"
+    }
+    Add-UiCheck -Case $case -Id 'SH-10' -Title $C.'SH-10' -Kind 'behavior' -Ok $hopOk -Detail $hopDetail
+
+    # ---------------------------------------------------------------- SH-11
+    # The footer 关于 entry. It is a real ROUTE, not a dialog - and the reason is
+    # structural: a NavigationViewItem inside FooterMenuItems stays selected after
+    # being picked, so an item that only popped a modal would leave a highlight
+    # that means nothing. The title-bar subtitle is derived from the route, which
+    # makes it the honest probe here; the hop back proves the entry is not a trap.
+    $railAboutItem = Find-ByName -Name $L.railAbout -Scope $navRoot -Exact -TimeoutMs 4000 -AllowMissing
+    $railBackItem = Find-ByName -Name $L.railInstances -Scope $navRoot -Exact -TimeoutMs 4000 -AllowMissing
+    $aboutOk = $false
+    $aboutDetail = 'about entry or instances entry not found in the rail'
+    if ($railAboutItem -and $railBackItem) {
+        Select-Element -Element $railAboutItem
+        $onAbout = Wait-Until -TimeoutMs 20000 -Message 'about page via rail entry' -Condition {
+            $now = Find-ByAutomationId -Id 'PART_SubtitleText' -Scope (Get-UiRoot -Hwnd $app.Hwnd) -Exact -TimeoutMs 500 -AllowMissing
+            if ($null -eq $now) { return $false }
+            return ((Get-ElementName -Element $now) -eq $L.subtitleAbout)
+        }
+        Select-Element -Element $railBackItem
+        $backFromAbout = Wait-Until -TimeoutMs 20000 -Message 'instances page via rail entry' -Condition {
+            $null -ne (Find-ByAutomationId -Id $ctx.labels.p1.gridAid -Scope (Get-UiRoot -Hwnd $app.Hwnd) -Exact -TimeoutMs 500 -AllowMissing)
+        }
+        $aboutOk = ($onAbout -and $backFromAbout)
+        $aboutDetail = "subtitle became '$($L.subtitleAbout)'=$onAbout; back to instances=$backFromAbout"
+    }
+    Add-UiCheck -Case $case -Id 'SH-11' -Title $C.'SH-11' -Kind 'behavior' -Ok $aboutOk -Detail $aboutDetail
 }
 catch {
     $failure = Get-UiCaseFailure -ErrorRecord $_

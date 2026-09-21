@@ -124,42 +124,63 @@ try {
 
     # ---------------------------------------------------------------- P1-06
     # Behavior: the per-card "more" flyout opens and lists the real commands.
+    # Re-query the cards here: this is the first check after the app restart
+    # above, and UIA elements captured before a rebuild go stale (a stale
+    # reference makes Invoke throw, or silently do nothing).
+    #
+    # The open is retried ONCE with a fresh query. Not to hide a product defect:
+    # the flyout is opened again against a re-read element, and the assertion
+    # still demands the real menu items. A stale UIA reference is a harness
+    # artefact (the card containers are recycled by the GridView), and without
+    # this the whole page cascades into "everything not found".
     $fresh = Get-CardCount -Root $root
     $moreOk = $false
     $moreDetail = 'no cards'
+    $moreAttempts = 0
     if ($fresh.Count -gt 0) {
-        $moreButton = Find-ByName -Name $L.moreButton -Scope $fresh.Cards[0].Element -Exact -TimeoutMs 6000 -AllowMissing
-        if ($null -eq $moreButton) {
-            $moreDetail = "'$($L.moreButton)' button not found inside the first card"
-        } else {
-            Invoke-Element -Element $moreButton
+        while ($moreAttempts -lt 2 -and -not $moreOk) {
+            $moreAttempts += 1
             $probe = $L.moreMenuExpected[0]
-            $opened = Wait-Until -TimeoutMs 8000 -Message 'card flyout' -Condition {
-                $null -ne (Find-ByName -Name $probe -Scope $root -Exact -TimeoutMs 500 -AllowMissing)
+            $cards = Get-CardCount -Root (Get-UiRoot -Hwnd $app.Hwnd)
+            if ($cards.Count -eq 0) {
+                $moreDetail = "no cards on attempt $moreAttempts"
+                continue
             }
-            $items = @(Find-ByControlType -ControlType 'MenuItem' -Scope $root -All -AllowMissing)
+            $moreButton = Find-ByName -Name $L.moreButton -Scope $cards.Cards[0].Element -Exact -TimeoutMs 6000 -AllowMissing
+            if ($null -eq $moreButton) {
+                $moreDetail = "'$($L.moreButton)' button not found inside the first card (attempt $moreAttempts)"
+                continue
+            }
+            Invoke-Element -Element $moreButton
+            $opened = Wait-Until -TimeoutMs 8000 -Message 'card flyout' -Condition {
+                $null -ne (Find-ByName -Name $probe -Scope (Get-UiRoot -Hwnd $app.Hwnd) -Exact -TimeoutMs 500 -AllowMissing)
+            }
+            $items = @(Find-ByControlType -ControlType 'MenuItem' -Scope (Get-UiRoot -Hwnd $app.Hwnd) -All -AllowMissing)
             $found = 0
             foreach ($menu in $L.moreMenuExpected) {
                 foreach ($item in $items) { if ($item.Name -ceq $menu) { $found++; break } }
             }
             $moreOk = $opened -and ($found -ge 5)
-            $moreDetail = "flyout opened=$opened, expected items found $found/$($L.moreMenuExpected.Count)"
+            $moreDetail = "attempt ${moreAttempts}: flyout opened=$opened, expected items found $found/$($L.moreMenuExpected.Count)"
             [void](Send-Keys -Chord 'Escape' -Hwnd $app.Hwnd)
-            Start-Sleep -Milliseconds 700
+            Start-Sleep -Milliseconds 900
         }
     }
     Add-UiCheck -Case $case -Id 'P1-06' -Title $C.'P1-06' -Kind 'behavior' -Ok $moreOk -Detail $moreDetail
 
     # ---------------------------------------------------------------- P1-07
+    # Fresh query again: P1-06 just opened and closed the card flyout, and a UIA
+    # reference taken before that can go stale once the container is recycled.
+    $detailCards = Get-CardCount -Root (Get-UiRoot -Hwnd $app.Hwnd)
     $detailOk = $false
     $detailDetail = 'no cards'
-    if ($fresh.Count -gt 0) {
+    if ($detailCards.Count -gt 0) {
         $withButton = 0
-        foreach ($card in $fresh.Cards) {
-            if ($null -ne (Find-ByName -Name $L.detailButton -Scope $card.Element -Exact -TimeoutMs 500 -AllowMissing)) { $withButton++ }
+        foreach ($card in $detailCards.Cards) {
+            if ($null -ne (Find-ByName -Name $L.detailButton -Scope $card.Element -Exact -TimeoutMs 2000 -AllowMissing)) { $withButton++ }
         }
-        $detailOk = ($withButton -eq $fresh.Count)
-        $detailDetail = "$withButton/$($fresh.Count) cards have a '$($L.detailButton)' button"
+        $detailOk = ($withButton -eq $detailCards.Count)
+        $detailDetail = "$withButton/$($detailCards.Count) cards have a '$($L.detailButton)' button"
     }
     Add-UiCheck -Case $case -Id 'P1-07' -Title $C.'P1-07' -Kind 'existence' -Ok $detailOk -Detail $detailDetail
 
@@ -202,6 +223,53 @@ try {
         $refreshDetail = "cards after refresh = $($afterRefresh.Count) (backend $($ctx.expect.instanceCount))"
     }
     Add-UiCheck -Case $case -Id 'P1-10' -Title $C.'P1-10' -Kind 'behavior' -Ok $refreshOk -Detail $refreshDetail
+
+    # ---------------------------------------------------------------- P1-11
+    # The instance-pack IMPORT entry lives in the page header (the old Electron
+    # list page had it too; the WinUI rewrite dropped it while leaving the
+    # pack:import channel and the host file picker fully wired).
+    $importPack = Find-ByName -Name $L.importPackName -Scope $root -Exact -TimeoutMs 5000 -AllowMissing
+    $importPackOk = ($null -ne $importPack) -and $importPack.IsEnabled
+    $importPackDetail = "entry '$($L.importPackName)' present=$($null -ne $importPack)"
+    if ($null -ne $importPack) {
+        $importPackDetail += " enabled=$($importPack.IsEnabled) ct=$($importPack.ControlType) aid='$($importPack.AutomationId)'"
+    }
+    Add-UiCheck -Case $case -Id 'P1-11' -Title $C.'P1-11' -Kind 'existence' -Ok $importPackOk -Detail $importPackDetail
+
+    # ---------------------------------------------------------------- P1-12
+    # The EXPORT entry lives in the per-card "more" menu and must be ENABLED for
+    # a normal instance (an entry that exists but is disabled is not an entry).
+    # Nothing is invoked here: exporting pops a real "save as" dialog.
+    $exportItem = $null
+    $exportProbe = 'flyout not opened'
+    # Re-query the cards instead of reusing $fresh: P1-10 clicked "refresh", which
+    # rebuilds the GridView items, so UIA elements captured before it are stale.
+    $exportCards = Get-CardCount -Root (Get-UiRoot -Hwnd $app.Hwnd)
+    if ($exportCards.Count -gt 0) {
+        $cardButtons = @(Find-ByControlType -ControlType 'Button' -Scope $exportCards.Cards[0].Element -All -AllowMissing -TimeoutMs 3000)
+        $exportProbe = "card0 buttons=$($cardButtons.Count)"
+        foreach ($b in $cardButtons) { $exportProbe += " ['" + $b.Name + "']" }
+        $moreForExport = Find-ByName -Name $L.moreButton -Scope $exportCards.Cards[0].Element -Exact -TimeoutMs 6000 -AllowMissing
+        if ($null -ne $moreForExport) {
+            Invoke-Element -Element $moreForExport
+            [void](Wait-Until -TimeoutMs 8000 -Message 'card flyout (export entry)' -Condition {
+                $null -ne (Find-ByName -Name $L.moreMenuExpected[-2] -Scope $root -Exact -TimeoutMs 500 -AllowMissing)
+            })
+            $exportItem = Find-ByName -Name $L.moreMenuExpected[-2] -Scope $root -Exact -TimeoutMs 4000 -AllowMissing
+            [void](Send-Keys -Chord 'Escape' -Hwnd $app.Hwnd)
+            Start-Sleep -Milliseconds 700
+        } else {
+            $exportProbe = "'$($L.moreButton)' button not found inside the first card"
+        }
+    } else {
+        $exportProbe = 'no cards'
+    }
+    $exportOk = ($null -ne $exportItem) -and $exportItem.IsEnabled
+    $exportDetail = "entry '$($L.moreMenuExpected[-2])' present=$($null -ne $exportItem) ($exportProbe)"
+    if ($null -ne $exportItem) {
+        $exportDetail += " enabled=$($exportItem.IsEnabled) ct=$($exportItem.ControlType) offscreen=$($exportItem.IsOffscreen)"
+    }
+    Add-UiCheck -Case $case -Id 'P1-12' -Title $C.'P1-12' -Kind 'existence' -Ok $exportOk -Detail $exportDetail
 }
 catch {
     $failure = Get-UiCaseFailure -ErrorRecord $_

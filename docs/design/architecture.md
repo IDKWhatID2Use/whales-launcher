@@ -78,7 +78,7 @@ WhalesLauncher/
 │ desktop/src/WhalesLauncher.App/                     │
 │   Views/    8 个页面（实例列表 · 详情4标签 · 引擎 ·   │
 │             创建向导 · 全局设置）                    │
-│   Shell/    外壳（标题栏 · 左实例栏 · 日志抽屉 · 菜单）│
+│   Shell/    外壳（标题栏 · 左功能栏 · 日志抽屉 · 菜单）│
 │   Controls/ PageHeader · ToastHost                  │
 │   Services/ CoreBridge · AppState · 导航 · 格式化     │
 │   Models/   契约镜像（机械对应 contracts.ts）         │

@@ -1,0 +1,974 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>WhalesLauncher · 左栏改为功能列表（演示稿）</title>
+<style>
+  /* ==========================================================================
+     设计演示稿（不是产品代码）：用 HTML 复刻 WinUI 3 / Fluent 2 的观感，
+     用于确认「左栏 = 功能列表、实例列表移入实例页」这一布局改动。
+     色值取自 Fluent 2 令牌（Light/Dark 两套），间距与圆角沿用规范 §2.1 的 4 epx 栅格。
+     ========================================================================== */
+
+  * { box-sizing: border-box; }
+
+  /* 必须有这一条：下面很多组件自己写了 display:flex，
+     作者样式会压过 UA 的 [hidden]{display:none}，hidden 属性会形同虚设
+     （演示稿第一版正是这样把「功能列表」和「旧实例栏」同时画了出来）。 */
+  [hidden] { display: none !important; }
+
+  :root[data-theme="light"] {
+    --stage-bg: #e8e8e8;
+    --win-border: rgba(0,0,0,0.16);
+    --pane-bg: #f3f3f3;
+    --content-bg: #f9f9f9;
+    --card-bg: rgba(255,255,255,0.72);
+    --card-border: rgba(0,0,0,0.0578);
+    --ctrl-bg: rgba(255,255,255,0.7);
+    --ctrl-border: rgba(0,0,0,0.0578);
+    --ctrl-hover: rgba(249,249,249,0.5);
+    --text-1: rgba(0,0,0,0.8958);
+    --text-2: rgba(0,0,0,0.6063);
+    --text-3: rgba(0,0,0,0.4458);
+    --accent: #005fb8;
+    --accent-hover: #1a6fc4;
+    --accent-fg: #ffffff;
+    --accent-tint: rgba(0,95,184,0.09);
+    --nav-hover: rgba(0,0,0,0.0373);
+    --nav-press: rgba(0,0,0,0.0241);
+    --nav-sel: rgba(0,0,0,0.0605);
+    --divider: rgba(0,0,0,0.0803);
+    --info-bg: #fff4ce;
+    --info-border: rgba(0,0,0,0.0578);
+    --info-icon: #9d5d00;
+    --success: #0f7b0f;
+    --caution: #9d5d00;
+    --critical: #c42b1c;
+    --attention: #005fb8;
+    --shadow: 0 24px 64px rgba(0,0,0,0.28), 0 2px 8px rgba(0,0,0,0.16);
+    --mono-bg: rgba(0,0,0,0.035);
+  }
+
+  :root[data-theme="dark"] {
+    --stage-bg: #161616;
+    --win-border: rgba(255,255,255,0.12);
+    --pane-bg: #202020;
+    --content-bg: #272727;
+    --card-bg: rgba(255,255,255,0.0512);
+    --card-border: rgba(255,255,255,0.0698);
+    --ctrl-bg: rgba(255,255,255,0.0605);
+    --ctrl-border: rgba(255,255,255,0.0698);
+    --ctrl-hover: rgba(255,255,255,0.0837);
+    --text-1: rgba(255,255,255,0.95);
+    --text-2: rgba(255,255,255,0.786);
+    --text-3: rgba(255,255,255,0.5442);
+    --accent: #60cdff;
+    --accent-hover: #7ad6ff;
+    --accent-fg: #000000;
+    --accent-tint: rgba(96,205,255,0.12);
+    --nav-hover: rgba(255,255,255,0.0605);
+    --nav-press: rgba(255,255,255,0.0419);
+    --nav-sel: rgba(255,255,255,0.0837);
+    --divider: rgba(255,255,255,0.0837);
+    --info-bg: #433519;
+    --info-border: rgba(255,255,255,0.0698);
+    --info-icon: #fce100;
+    --success: #6ccb5f;
+    --caution: #fce100;
+    --critical: #ff99a4;
+    --attention: #60cdff;
+    --shadow: 0 24px 64px rgba(0,0,0,0.6), 0 2px 8px rgba(0,0,0,0.4);
+    --mono-bg: rgba(255,255,255,0.045);
+  }
+
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 20px;
+    color: var(--text-1);
+    background: var(--stage-bg);
+    -webkit-font-smoothing: antialiased;
+    padding: 24px 24px 24px;
+    min-height: 100vh;
+  }
+
+  .stage { display: flex; justify-content: center; align-items: flex-start; }
+
+  /* ---------------------------------------------------------------- 窗口 */
+  .win {
+    width: 1280px;
+    height: 840px;
+    background: var(--content-bg);
+    border: 1px solid var(--win-border);
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    flex: 0 0 auto;
+  }
+
+  /* 标题栏 */
+  .titlebar {
+    height: 48px;
+    flex: 0 0 48px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding-left: 12px;
+    background: var(--pane-bg);
+    border-bottom: 1px solid transparent;
+  }
+  .tb-icon { width: 20px; height: 20px; font-size: 15px; line-height: 20px; text-align: center; }
+  .tb-title { font-size: 12px; margin-left: 8px; color: var(--text-1); }
+  .tb-sub { font-size: 12px; margin-left: 8px; color: var(--text-2); }
+  .menubar { display: flex; gap: 2px; margin-left: 12px; }
+  .menubar span {
+    font-size: 12px; padding: 4px 8px; border-radius: 4px; color: var(--text-1);
+  }
+  .menubar span:hover { background: var(--nav-hover); }
+  .tb-right { margin-left: auto; display: flex; align-items: center; gap: 8px; padding-right: 0; height: 100%; }
+  .tb-btn {
+    display: flex; align-items: center; gap: 8px;
+    height: 32px; padding: 0 10px; border-radius: 4px;
+    background: transparent; border: 1px solid transparent;
+    font-size: 12px; color: var(--text-1); cursor: pointer;
+  }
+  .tb-btn:hover { background: var(--nav-hover); }
+  .tb-btn.on { background: var(--nav-sel); border-color: var(--ctrl-border); }
+  .winbtns { display: flex; height: 48px; margin-left: 4px; }
+  .winbtn { width: 46px; height: 48px; display: grid; place-items: center; cursor: default; color: var(--text-1); }
+  .winbtn:hover { background: var(--nav-hover); }
+  .winbtn.close:hover { background: #c42b1c; color: #fff; }
+
+  /* 主体：左功能栏 + 内容区 */
+  .body { flex: 1 1 auto; display: flex; min-height: 0; position: relative; }
+
+  .pane {
+    width: 280px;
+    flex: 0 0 280px;
+    background: var(--pane-bg);
+    display: flex;
+    flex-direction: column;
+    padding: 0 0 8px;
+    transition: flex-basis .18s ease, width .18s ease;
+  }
+  .pane-head { height: 48px; display: flex; align-items: center; padding-left: 4px; }
+  .pane-toggle {
+    width: 40px; height: 40px; display: grid; place-items: center;
+    border-radius: 4px; cursor: pointer; color: var(--text-1);
+  }
+  .pane-toggle:hover { background: var(--nav-hover); }
+  .pane-items { display: flex; flex-direction: column; gap: 2px; padding: 4px 0 0; }
+  .pane-spacer { flex: 1 1 auto; }
+
+  .nav-item {
+    position: relative;
+    height: 40px;
+    margin: 0 4px;
+    border-radius: 5px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 12px;
+    cursor: default;
+    color: var(--text-1);
+    user-select: none;
+  }
+  .nav-item:hover { background: var(--nav-hover); }
+  .nav-item:active { background: var(--nav-press); }
+  .nav-item .ico { width: 16px; height: 16px; flex: 0 0 16px; display: grid; place-items: center; color: var(--text-1); }
+  .nav-item .label { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .nav-item .hint { margin-left: auto; font-size: 12px; color: var(--text-3); }
+  .nav-item.selected { background: var(--nav-sel); }
+  .nav-item.selected .label { font-weight: 600; }
+  .nav-item.selected::before {
+    content: ""; position: absolute; left: -4px; top: 50%; transform: translateY(-50%);
+    width: 3px; height: 16px; border-radius: 2px; background: var(--accent);
+  }
+  /* 选中项只换背景 + 选中条 + 字重，**图标保持主文字色**。
+     给选中图标上强调色会出现「深色主题下一枚亮青色图标」的突兀感，也与 WinUI
+     NavigationView 的真实行为不符（它只把左侧 3px 指示条染成强调色）。 */
+
+  /* 紧凑左栏（NavigationView 的 LeftCompact 形态） */
+  .win.compact .pane { width: 48px; flex-basis: 48px; }
+  .win.compact .nav-item { justify-content: center; padding: 0; gap: 0; }
+  .win.compact .nav-item .label,
+  .win.compact .nav-item .hint { display: none; }
+
+  .content { flex: 1 1 auto; min-width: 0; background: var(--content-bg); overflow: hidden; }
+  .page { height: 100%; overflow: auto; padding: 24px; }
+  .page::-webkit-scrollbar { width: 12px; }
+  .page::-webkit-scrollbar-thumb { background: var(--text-3); border-radius: 6px; border: 4px solid transparent; background-clip: content-box; }
+
+  /* ------------------------------------------------------------- 通用元件 */
+  .page-head { display: flex; align-items: flex-start; gap: 16px; }
+  .page-head .h1 { font-size: 28px; line-height: 36px; font-weight: 600; }
+  .page-head .desc { font-size: 14px; color: var(--text-2); margin-top: 4px; }
+  .page-head .acts { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+
+  .btn {
+    height: 32px; padding: 0 12px; border-radius: 4px; cursor: default;
+    display: inline-flex; align-items: center; gap: 8px; white-space: nowrap;
+    background: var(--ctrl-bg); border: 1px solid var(--ctrl-border);
+    color: var(--text-1); font-size: 14px; font-family: inherit;
+  }
+  .btn:hover { background: var(--ctrl-hover); }
+  .btn.accent { background: var(--accent); border-color: transparent; color: var(--accent-fg); font-weight: 600; }
+  .btn.accent:hover { background: var(--accent-hover); }
+  .btn.subtle { background: transparent; border-color: transparent; }
+  .btn.subtle:hover { background: var(--nav-hover); }
+  .btn[disabled] { opacity: .4; }
+
+  .toolbar { display: flex; align-items: flex-end; gap: 16px; margin-top: 24px; }
+  .search {
+    width: 320px; height: 32px; border-radius: 4px; display: flex; align-items: center;
+    background: var(--ctrl-bg); border: 1px solid var(--ctrl-border); padding: 0 10px; gap: 8px;
+  }
+  .search input {
+    border: 0; outline: 0; background: transparent; font: inherit; color: var(--text-1);
+    flex: 1 1 auto; min-width: 0;
+  }
+  .search input::placeholder { color: var(--text-3); }
+  .segbar { display: flex; align-items: center; gap: 4px; height: 32px; }
+  .segbar .seg { position: relative; padding: 0 12px; height: 32px; display: flex; align-items: center; border-radius: 4px; color: var(--text-2); cursor: default; }
+  .segbar .seg:hover { background: var(--nav-hover); }
+  .segbar .seg.on { color: var(--text-1); font-weight: 600; }
+  .segbar .seg.on::after {
+    content: ""; position: absolute; left: 10px; right: 10px; bottom: 0; height: 2.5px;
+    border-radius: 2px; background: var(--accent);
+  }
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field > label { font-size: 12px; color: var(--text-2); }
+  .combo {
+    height: 32px; min-width: 168px; border-radius: 4px; background: var(--ctrl-bg);
+    border: 1px solid var(--ctrl-border); display: flex; align-items: center;
+    padding: 0 8px 0 12px; gap: 8px; color: var(--text-1);
+  }
+  .combo .chev { margin-left: auto; color: var(--text-2); }
+
+  .infobar {
+    display: flex; gap: 12px; align-items: flex-start;
+    margin-top: 16px; padding: 12px;
+    background: var(--info-bg); border: 1px solid var(--info-border); border-radius: 4px;
+  }
+  .infobar .icon { color: var(--info-icon); flex: 0 0 16px; margin-top: 2px; }
+  .infobar .txt { font-size: 14px; }
+  .infobar .txt b { font-weight: 600; }
+
+  /* --------------------------------------------------------------- 实例卡片 */
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, 320px); gap: 8px; margin-top: 16px; }
+  .card {
+    width: 320px; min-height: 240px; padding: 16px; display: flex; flex-direction: column; gap: 8px;
+    background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 4px;
+  }
+  .card-top { display: flex; gap: 8px; }
+  .avatar {
+    width: 40px; height: 40px; border-radius: 4px; flex: 0 0 40px;
+    display: grid; place-items: center; font-size: 18px;
+  }
+  .card-name { font-size: 18px; line-height: 24px; font-weight: 600; }
+  .card-dir { font-size: 12px; color: var(--text-3); }
+  .state-row { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 8px; }
+  .dot.running { background: var(--success); }
+  .dot.stopped { background: var(--text-3); }
+  .dot.crashed { background: var(--critical); }
+  .dot.transitional { background: var(--caution); }
+  .state-label { font-weight: 600; }
+  .endpoint { font-size: 12px; color: var(--text-3); margin-left: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .meta { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-2); }
+  .meta .sep { color: var(--text-3); }
+  .card .infobar { margin-top: 0; padding: 8px 10px; }
+  .card .infobar .txt { font-size: 12px; }
+  .card-acts { display: flex; align-items: center; gap: 8px; margin-top: auto; padding-top: 4px; }
+  .card-acts .grow { flex: 1 1 auto; }
+
+  /* ------------------------------------------------------------- 详情页 */
+  .crumb { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-2); }
+  .crumb .link { color: var(--text-2); cursor: default; padding: 2px 4px; border-radius: 4px; }
+  .crumb .link:hover { background: var(--nav-hover); color: var(--text-1); }
+  .crumb .cur { color: var(--text-1); }
+  .crumb .chev { color: var(--text-3); }
+  .tabs { display: flex; gap: 4px; margin-top: 16px; height: 32px; }
+  .tab { position: relative; padding: 0 12px; display: flex; align-items: center; border-radius: 4px; color: var(--text-2); cursor: default; }
+  .tab:hover { background: var(--nav-hover); }
+  .tab.on { color: var(--text-1); font-weight: 600; }
+  .tab.on::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: 0; height: 2.5px; border-radius: 2px; background: var(--accent); }
+
+  .panel {
+    margin-top: 16px; background: var(--card-bg); border: 1px solid var(--card-border);
+    border-radius: 4px; padding: 16px;
+  }
+  .panel h3 { margin: 0 0 4px; font-size: 14px; font-weight: 600; }
+  .panel .sub { font-size: 12px; color: var(--text-3); }
+  .rows { margin-top: 12px; border-top: 1px solid var(--divider); }
+  .row {
+    display: flex; align-items: center; gap: 12px; padding: 10px 0;
+    border-bottom: 1px solid var(--divider);
+  }
+  .row .t { flex: 1 1 auto; min-width: 0; }
+  .row .t .n { font-weight: 600; }
+  .row .t .d { font-size: 12px; color: var(--text-3); }
+  .tag { font-size: 12px; color: var(--text-2); background: var(--mono-bg); border: 1px solid var(--card-border); border-radius: 4px; padding: 1px 8px; }
+  .switch { width: 40px; height: 20px; border-radius: 10px; background: var(--ctrl-bg); border: 1px solid var(--ctrl-border); position: relative; flex: 0 0 40px; }
+  .switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 12px; height: 12px; border-radius: 50%; background: var(--text-1); transition: left .15s; }
+  .switch.on { background: var(--accent); border-color: transparent; }
+  .switch.on::after { left: 23px; background: var(--accent-fg); }
+  .formgrid { display: grid; grid-template-columns: 360px 360px; gap: 16px 24px; margin-top: 12px; }
+  .input {
+    height: 32px; border-radius: 4px; background: var(--ctrl-bg); border: 1px solid var(--ctrl-border);
+    display: flex; align-items: center; padding: 0 12px; color: var(--text-1);
+  }
+  .radio { display: flex; gap: 16px; margin-top: 6px; }
+  .radio label { display: flex; align-items: center; gap: 8px; color: var(--text-1); }
+  .rdot { width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--text-2); display: grid; place-items: center; }
+  .rdot.on { border-color: var(--accent); }
+  .rdot.on::after { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--accent); }
+  .logbox { margin-top: 12px; background: var(--mono-bg); border: 1px solid var(--divider); border-radius: 4px; padding: 12px; font-family: Consolas, "Cascadia Mono", monospace; font-size: 12px; line-height: 20px; color: var(--text-1); overflow: auto; max-height: 380px; }
+  .logbox .lv-INFO { color: var(--text-2); }
+  .logbox .lv-WARN { color: var(--caution); }
+  .logbox .lv-ERR { color: var(--critical); }
+  .kv { display: grid; grid-template-columns: 160px 1fr; gap: 8px 16px; margin-top: 12px; font-size: 14px; }
+  .kv .k { color: var(--text-2); }
+
+  /* --------------------------------------------------------- 右侧日志抽屉 */
+  .logdrawer {
+    position: absolute; top: 0; right: 0; bottom: 0; width: 480px;
+    background: var(--pane-bg); border-left: 1px solid var(--divider);
+    box-shadow: -8px 0 24px rgba(0,0,0,.16);
+    transform: translateX(100%); transition: transform .2s ease;
+    display: flex; flex-direction: column; padding: 16px; gap: 8px; z-index: 5;
+  }
+  .logdrawer.open { transform: translateX(0); }
+  .logdrawer .hd { display: flex; align-items: center; }
+  .logdrawer .hd .ttl { font-size: 20px; font-weight: 600; flex: 1 1 auto; }
+  .logdrawer .tools { display: flex; gap: 8px; }
+
+  /* ------------------------------------------------------------ 说明浮层 */
+  .annot {
+    position: fixed; right: 20px; bottom: 20px; width: 396px; z-index: 40;
+    background: var(--pane-bg); border: 1px solid var(--win-border); border-radius: 8px;
+    box-shadow: var(--shadow); overflow: hidden;
+    color: var(--text-1);
+  }
+  .annot .hd { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--divider); }
+  .annot .hd .ttl { font-weight: 600; flex: 1 1 auto; }
+  .annot .bd { padding: 12px 16px 16px; max-height: 60vh; overflow: auto; }
+  .annot .bd p { margin: 0 0 8px; font-size: 13px; color: var(--text-1); }
+  .annot .bd ol { margin: 0 0 12px; padding-left: 20px; font-size: 13px; }
+  .annot .bd li { margin-bottom: 6px; }
+  .annot .bd li b { font-weight: 600; }
+  .annot .note { font-size: 12px; color: var(--text-2); background: var(--mono-bg); border-radius: 4px; padding: 8px 10px; }
+  .annot .opt { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-top: 1px solid var(--divider); }
+  .annot .opt .t { flex: 1 1 auto; }
+  .annot .opt .t .n { font-size: 13px; }
+  .annot .opt .t .d { font-size: 12px; color: var(--text-2); }
+  .annot .sw { width: 40px; height: 20px; border-radius: 10px; background: var(--ctrl-bg); border: 1px solid var(--ctrl-border); position: relative; flex: 0 0 40px; cursor: default; }
+  .annot .sw::after { content: ""; position: absolute; top: 3px; left: 3px; width: 12px; height: 12px; border-radius: 50%; background: var(--text-1); transition: left .15s; }
+  .annot .sw.on { background: var(--accent); border-color: transparent; }
+  .annot .sw.on::after { left: 23px; background: var(--accent-fg); }
+  .annot.folded .bd { display: none; }
+  .ann-hd-btn { cursor: default; color: var(--text-2); padding: 2px 6px; border-radius: 4px; font-size: 12px; }
+  .ann-hd-btn:hover { background: var(--nav-hover); color: var(--text-1); }
+
+  .empty { margin-top: 48px; text-align: center; color: var(--text-2); }
+  .empty .big { font-size: 16px; font-weight: 600; color: var(--text-1); margin-bottom: 4px; }
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="win" id="win">
+    <!-- ============================ 标题栏 ============================ -->
+    <div class="titlebar">
+      <div class="tb-icon">🐋</div>
+      <span class="tb-title">WhalesLauncher</span>
+      <span class="tb-sub" id="tbSub">实例</span>
+      <div class="menubar">
+        <span>文件</span><span>编辑</span><span>视图</span><span>窗口</span><span>帮助</span>
+      </div>
+      <div class="tb-right">
+        <button class="tb-btn" id="logToggle">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M4 2.5h5l3 3v8h-8z"/><path d="M9 2.5v3h3"/><path d="M5.5 8.5h5M5.5 11h5"/></svg>
+          运行日志
+        </button>
+        <button class="tb-btn" id="themeBtn">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="8" cy="8" r="3.2"/><path d="M8 1v1.6M8 13.4V15M1 8h1.6M13.4 8H15M3.1 3.1l1.1 1.1M11.8 11.8l1.1 1.1M12.9 3.1l-1.1 1.1M4.2 11.8l-1.1 1.1"/></svg>
+          <span id="themeLabel">浅色</span>
+        </button>
+        <div class="winbtns">
+          <div class="winbtn"><svg width="10" height="10" viewBox="0 0 10 10" stroke="currentColor" stroke-width="1"><path d="M0 .5h10"/></svg></div>
+          <div class="winbtn"><svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1"><rect x=".5" y=".5" width="9" height="9"/></svg></div>
+          <div class="winbtn close"><svg width="10" height="10" viewBox="0 0 10 10" stroke="currentColor" stroke-width="1"><path d="M.5.5l9 9M9.5.5l-9 9"/></svg></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============================ 主体 ============================ -->
+    <div class="body">
+      <!-- ============ 左栏：功能列表（本次改动的核心） ============ -->
+      <nav class="pane" id="pane">
+        <div class="pane-head">
+          <div class="pane-toggle" id="paneToggle" title="折叠 / 展开左栏">
+            <svg width="16" height="16" viewBox="0 0 16 16" stroke="currentColor" stroke-width="1.3"><path d="M2 4h12M2 8h12M2 12h12"/></svg>
+          </div>
+        </div>
+        <div class="pane-items" id="navItems">
+          <div class="nav-item selected" data-page="instances" title="实例">
+            <span class="ico"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"><rect x="2" y="2" width="5.4" height="5.4" rx="1.3"/><rect x="8.6" y="2" width="5.4" height="5.4" rx="1.3"/><rect x="2" y="8.6" width="5.4" height="5.4" rx="1.3"/><rect x="8.6" y="8.6" width="5.4" height="5.4" rx="1.3"/></svg></span>
+            <span class="label">实例</span>
+            <span class="hint" id="instCount">7</span>
+          </div>
+          <div class="nav-item" data-page="engines" title="引擎版本管理">
+            <span class="ico"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"><path d="M8 1.9l5.3 2.9v6.4L8 14.1l-5.3-2.9V4.8z"/><path d="M2.7 4.8L8 7.7l5.3-2.9M8 7.7v6.4"/></svg></span>
+            <span class="label">引擎版本管理</span>
+          </div>
+          <div class="nav-item" data-page="settings" title="全局设置">
+            <span class="ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.325 4.317c.426 -1.756 2.924 -1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543 -.94 3.31 .826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756 .426 1.756 2.924 0 3.35a1.724 1.724 0 0 0 -1.066 2.573c.94 1.543 -.826 3.31 -2.37 2.37a1.724 1.724 0 0 0 -2.572 1.065c-.426 1.756 -2.924 1.756 -3.35 0a1.724 1.724 0 0 0 -2.573 -1.066c-1.543 .94 -3.31 -.826 -2.37 -2.37a1.724 1.724 0 0 0 -1.065 -2.572c-1.756 -.426 -1.756 -2.924 0 -3.35a1.724 1.724 0 0 0 1.066 -2.573c-.94 -1.543 .826 -3.31 2.37 -2.37c.996 .608 2.296 .07 2.572 -1.065z"/><circle cx="12" cy="12" r="3"/></svg></span>
+            <span class="label">全局设置</span>
+          </div>
+          <div class="nav-item" data-page="create" id="navCreate" title="新建实例" hidden>
+            <span class="ico"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M8 3.4v9.2M3.4 8h9.2"/></svg></span>
+            <span class="label">新建实例</span>
+          </div>
+        </div>
+
+        <div class="pane-spacer" id="paneSpacer"></div>
+        <!-- 「关于」固定在左栏底部（已确认保留） -->
+        <div class="nav-item" data-page="about" id="navAbout" title="关于 WhalesLauncher">
+          <span class="ico"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"><circle cx="8" cy="8" r="6.1"/><path d="M8 7.3v4.3M8 4.8v1"/></svg></span>
+          <span class="label">关于</span>
+        </div>
+      </nav>
+
+      <!-- ============ 内容区 ============ -->
+      <main class="content">
+        <!-- ---------- 实例页（实例列表的新家） ---------- -->
+        <section class="page" id="page-instances">
+          <div class="page-head">
+            <div>
+              <div class="h1">实例</div>
+              <div class="desc">管理本机的 dsh 实例：启动、停止、打开目录与查看异常。</div>
+            </div>
+            <div class="acts">
+              <button class="btn">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M8 10.5V2.5M5 5.5L8 2.5l3 3"/><path d="M2.5 10v3.5h11V10"/></svg>
+                导入实例包
+              </button>
+              <button class="btn">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M13.5 8a5.5 5.5 0 1 1-1.7-3.9"/><path d="M13.4 1.6v3.2h-3.2"/></svg>
+                刷新
+              </button>
+              <button class="btn accent">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M8 3v10M3 8h10"/></svg>
+                新建实例
+              </button>
+            </div>
+          </div>
+
+          <div class="toolbar">
+            <div class="search">
+              <input id="searchInput" placeholder="搜索实例名、目录名、备注" />
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="7" cy="7" r="4.5"/><path d="M10.4 10.4L14 14"/></svg>
+            </div>
+            <div class="segbar" id="statusFilter">
+              <div class="seg on" data-filter="all">全部</div>
+              <div class="seg" data-filter="running">运行中</div>
+              <div class="seg" data-filter="stopped">已停止</div>
+              <div class="seg" data-filter="attention">需处理</div>
+            </div>
+            <div class="field" style="margin-left:auto">
+              <label>排序</label>
+              <div class="combo"><span>最近启动</span>
+                <span class="chev"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M2.5 4.5L6 8l3.5-3.5"/></svg></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="infobar" id="attentionBar">
+            <span class="icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M8 2l6 11H2z"/><path d="M8 6.5v3.2M8 11.4v.8"/></svg></span>
+            <div class="txt" id="attentionText"></div>
+          </div>
+
+          <div class="grid" id="cardGrid"></div>
+          <div class="empty" id="emptyState" hidden>
+            <div class="big">没有匹配的实例</div>
+            <div>换个关键词，或切换状态筛选。</div>
+          </div>
+        </section>
+
+        <!-- ---------- 实例详情页（「实例」功能下的下钻页） ---------- -->
+        <section class="page" id="page-detail" hidden>
+          <div class="crumb">
+            <span class="link" data-goto="instances">实例</span>
+            <span class="chev">›</span>
+            <span class="link" data-goto="instances" id="crumbName">文档工作台</span>
+            <span class="chev">›</span>
+            <span class="cur" id="crumbTab">插件</span>
+          </div>
+
+          <div class="page-head" style="margin-top:12px">
+            <div>
+              <div class="h1" id="detailName">文档工作台</div>
+              <div class="desc" id="detailDesc">workbench · 已停止 · 引擎 0.1.6-alpha.2</div>
+            </div>
+            <div class="acts">
+              <button class="btn" data-goto="instances">返回</button>
+              <button class="btn">打开文件夹</button>
+              <button class="btn accent">启动</button>
+            </div>
+          </div>
+
+          <div class="tabs" id="detailTabs">
+            <div class="tab on" data-tab="plugins">插件</div>
+            <div class="tab" data-tab="settings">设置</div>
+            <div class="tab" data-tab="saves">存档</div>
+            <div class="tab" data-tab="logs">日志</div>
+          </div>
+
+          <div id="detailBody"></div>
+        </section>
+
+        <!-- ---------- 引擎版本管理 ---------- -->
+        <section class="page" id="page-engines" hidden>
+          <div class="page-head">
+            <div>
+              <div class="h1">引擎版本管理</div>
+              <div class="desc">安装、移除 dsh 引擎版本；实例绑定的引擎在这三个版本中选择。</div>
+            </div>
+            <div class="acts">
+              <button class="btn">检查更新</button>
+              <button class="btn accent">安装引擎…</button>
+            </div>
+          </div>
+          <div class="panel">
+            <h3>已安装引擎</h3>
+            <div class="sub">来自 engines/ 目录；卸载前会检查是否仍被实例引用。</div>
+            <div class="rows">
+              <div class="row">
+                <div class="t"><div class="n">0.1.6-alpha.2</div><div class="d">engines/0.1.6-alpha.2 · 412 MB · 6 个实例正在使用</div></div>
+                <span class="tag">当前默认</span>
+                <button class="btn" disabled>卸载</button>
+              </div>
+              <div class="row">
+                <div class="t"><div class="n">0.1.6-rc.2</div><div class="d">engines/0.1.6-rc.2 · 408 MB · 1 个实例正在使用</div></div>
+                <button class="btn">卸载</button>
+              </div>
+              <div class="row">
+                <div class="t"><div class="n">0.1.5</div><div class="d">engines/0.1.5 · 396 MB · 未被使用</div></div>
+                <button class="btn">卸载</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ---------- 全局设置 ---------- -->
+        <section class="page" id="page-settings" hidden>
+          <div class="page-head">
+            <div>
+              <div class="h1">全局设置</div>
+              <div class="desc">外观、Node 运行时、端口分配与其它全局配置。</div>
+            </div>
+            <div class="acts"><button class="btn accent">保存</button></div>
+          </div>
+          <div class="panel">
+            <h3>外观</h3>
+            <div class="formgrid">
+              <div class="field">
+                <label>主题</label>
+                <div class="radio">
+                  <label><span class="rdot on"></span>浅色</label>
+                  <label><span class="rdot"></span>深色</label>
+                  <label><span class="rdot"></span>跟随系统</label>
+                </div>
+              </div>
+              <div class="field">
+                <label>左栏默认形态</label>
+                <div class="combo"><span>展开（图标 + 文字）</span><span class="chev"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M2.5 4.5L6 8l3.5-3.5"/></svg></span></div>
+              </div>
+            </div>
+          </div>
+          <div class="panel">
+            <h3>Node 运行时</h3>
+            <div class="sub">dsh 引擎需要本机 Node。留空表示按 PATH → 内置运行时顺序探测。</div>
+            <div class="formgrid">
+              <div class="field"><label>Node 路径</label><div class="input">（自动探测）</div></div>
+              <div class="field"><label>探测结果</label><div class="input" style="color:var(--text-2)">v22.11.0 · C:\Program Files\nodejs\node.exe</div></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ---------- 新建实例（现有四步向导，原样保留） ---------- -->
+        <section class="page" id="page-create" hidden>
+          <div class="page-head">
+            <div>
+              <div class="h1">新建实例</div>
+              <div class="desc">四步向导：名称 → 引擎 → 模板 → 隔离方式。现有 WizardPage 原样保留，不受本次布局改动影响。</div>
+            </div>
+            <div class="acts">
+              <button class="btn" data-goto="instances">取消</button>
+              <button class="btn accent">下一步</button>
+            </div>
+          </div>
+          <div class="panel">
+            <h3>1 / 4 · 名称</h3>
+            <div class="sub">实例名可随时改；目录名创建后不可改。</div>
+            <div class="formgrid">
+              <div class="field"><label>实例名</label><div class="input">我的实例</div></div>
+              <div class="field"><label>目录名（自动派生）</label><div class="input" style="color:var(--text-2)">my-instance</div></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ---------- 关于（可选入口） ---------- -->
+        <section class="page" id="page-about" hidden>
+          <div class="page-head">
+            <div>
+              <div class="h1">关于</div>
+              <div class="desc">WhalesLauncher 1.0.1 · WinUI 3 前端 + Node 侧车引擎</div>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="kv">
+              <div class="k">版本</div><div>1.0.1</div>
+              <div class="k">前端</div><div>WinUI 3（Windows App SDK）</div>
+              <div class="k">业务引擎</div><div>Node 侧车进程（desktop/bridge）</div>
+              <div class="k">启动器目录</div><div>F:\WhalesLauncher</div>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <!-- ---------- 右侧运行日志抽屉（仍是全局层，不属于任何页面） ---------- -->
+      <aside class="logdrawer" id="logDrawer">
+        <div class="hd">
+          <div class="ttl">运行日志</div>
+          <button class="btn subtle" id="logDrawerClose">
+            <svg width="14" height="14" viewBox="0 0 14 14" stroke="currentColor" stroke-width="1.3"><path d="M2 2l10 10M12 2L2 12"/></svg>
+          </button>
+        </div>
+        <div class="field">
+          <div class="combo"><span>全部实例</span><span class="chev"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M2.5 4.5L6 8l3.5-3.5"/></svg></span></div>
+        </div>
+        <div class="tools">
+          <button class="btn">打开日志目录</button>
+          <button class="btn">复制全部</button>
+        </div>
+        <div class="logbox" style="flex:1 1 auto;max-height:none">
+          <div class="lv-INFO">[10:24:01] [launcher] 桥接层已就绪，端口 5199</div>
+          <div class="lv-INFO">[10:24:01] [instances] 已装载 7 个实例</div>
+          <div class="lv-INFO">[10:24:02] [pipeline] 引擎 0.1.6-rc.2 启动中…</div>
+          <div class="lv-INFO">[10:24:04] [pipeline] 界面地址 http://127.0.0.1:7801</div>
+          <div class="lv-WARN">[10:24:05] [record-broken] instance.json 损坏，已按只读模式装载</div>
+          <div class="lv-ERR">[10:24:07] [crash-demo] 上次退出码 1（见 logs/crash.txt）</div>
+        </div>
+        <div style="font-size:12px;color:var(--text-3)">共 6 行 · 跟随最新</div>
+      </aside>
+    </div>
+  </div>
+</div>
+
+<!-- ============================ 演示说明浮层 ============================ -->
+<aside class="annot" id="annot">
+  <div class="hd">
+    <div class="ttl">演示说明 · 待你确认</div>
+    <div class="ann-hd-btn" id="annotFold">收起</div>
+  </div>
+  <div class="bd">
+    <p><b>改动要点</b></p>
+    <ol>
+      <li>左栏由「实例列表」<b>换成功能列表</b>：实例 / 引擎版本管理 / 全局设置，<b>关于</b>固定在底部。</li>
+      <li><b>实例列表移入「实例」页</b>：卡片网格原样保留，搜索 / 状态筛选 / 排序也都在页内。</li>
+      <li>左栏顶部的「筛选实例」框<b>取消</b>——它与页内搜索框重复；左栏因此只承担"去哪一页"。</li>
+      <li>实例详情成为「实例」功能下的<b>下钻页</b>：左栏仍选中「实例」，页首加面包屑 实例 › 实例名 › 页签。</li>
+      <li>附带修好一处已知问题：现在从引擎 / 设置页<b>总有路径回到实例列表</b>（旧左栏没有"实例列表"入口）。</li>
+    </ol>
+    <p><b>图标与颜色</b></p>
+    <ol>
+      <li>三个功能图标统一为 16 px 描边风格（1.25 px），设置换成标准齿轮轮廓（原来那条手绘多边形是错的）。</li>
+      <li>选中项<b>只染左侧 3 px 指示条</b>，图标保持主文字色 —— WinUI NavigationView 就是这样，也避免深色主题下出现一枚突兀的亮色图标。</li>
+      <li>图标全部用 <code>currentColor</code>，深浅两套主题自动跟随。</li>
+      <li>实例头像的色底改成 <b>实例色的 10% 透明淡底</b>（与真实实现 <code>InstanceCardPaint.Tint</code> 的 <code>0x1A</code> 同源）—— 之前演示稿写成不透明浅色 hex，深色模式下是一块亮色方块，淡色文字几乎看不见。</li>
+    </ol>
+    <p><b>已确认</b></p>
+    <div class="opt" style="border-top:0;padding-top:0">
+      <div class="t"><div class="n">左栏底部固定「关于」</div><div class="d">按你的要求保留，固定在左栏最底部</div></div>
+      <span class="tag">已保留</span>
+    </div>
+    <p><b>可切换的选项</b></p>
+    <div class="opt">
+      <div class="t"><div class="n">左栏保留「新建实例」入口</div><div class="d">关闭时只靠实例页右上角的主按钮</div></div>
+      <div class="sw" id="swCreate"></div>
+    </div>
+    <div class="opt">
+      <div class="t"><div class="n">深色下加深实例色底（10% → 16%）</div><div class="d">默认与真实实现一致（10%）；觉得深色下色底太弱可打开看看</div></div>
+      <div class="sw" id="swTint"></div>
+    </div>
+    <div class="opt">
+      <div class="t"><div class="n">紧凑左栏（仅图标，48 px）</div><div class="d">预览窗口变窄时 NavigationView 的形态</div></div>
+      <div class="sw" id="swCompact"></div>
+    </div>
+    <div class="opt">
+      <div class="t"><div class="n">深色主题</div><div class="d">两套主题的观感都要过一遍</div></div>
+      <div class="sw" id="swDark"></div>
+    </div>
+    <p class="note" style="margin-top:12px">怎么看：左栏点三个功能项切页；实例页里点卡片「详情」进实例详情；试一下页内搜索与状态筛选。<br />这是纯 HTML 演示稿（不是产品代码），只为确认布局与观感；确认后我再改 <code>desktop/src/WhalesLauncher.App</code>。</p>
+  </div>
+</aside>
+
+<script>
+/* ------------------------------------------------------------------ 数据 */
+/* color = 实例强调色（契约里的 meta.color，形如 #5B8DEF）。
+   注意这里存的是**颜色本身**而不是"浅色底"：底色由 color 按不透明度算出来（见 tintOf），
+   这样浅深两套主题下都能自适应 —— 存不透明浅色 hex 会在深色模式里变成一块亮色方块。 */
+const instances = [
+  { id:'crash-demo', name:'崩溃演示实例', avatar:'✱', color:'#D13438', state:'crashed', engine:'0.1.6-alpha.2', deps:0, last:'6 分钟前',
+    problem:'', note:'用于复现崩溃的实例' },
+  { id:'workbench', name:'文档工作台', avatar:'📘', color:'#5B8DEF', state:'stopped', engine:'0.1.6-alpha.2', deps:0, last:'6 分钟前', note:'' },
+  { id:'research', name:'资料检索', avatar:'🔍', color:'#107C10', state:'stopped', engine:'0.1.6-alpha.2', deps:0, last:'3 小时前', note:'检索类插件实验' },
+  { id:'pipeline', name:'数据流水线', avatar:'🛠', color:'#8B5CF6', state:'running', engine:'0.1.6-rc.2', deps:0, last:'昨天 17:31',
+    endpoint:'http://127.0.0.1:7801', note:'' },
+  { id:'record-broken', name:'记录异常实例', avatar:'📝', color:'#C19C00', state:'stopped', engine:'0.1.6-alpha.2', deps:0, last:'2 天前',
+    problem:'instance.json 损坏（无法解析）', note:'故障样本' },
+  { id:'archived', name:'已归档实例', avatar:'📦', color:'#8A8886', state:'stopped', engine:'0.1.5', deps:0, last:'上周',
+    problem:'instance.json 损坏（无法解析）', note:'' },
+  { id:'legacy', name:'旧版兼容测试', avatar:'✳', color:'#CA5010', state:'stopped', engine:'0.1.5', deps:0, last:'上周',
+    problem:'instance.json 损坏（无法解析）', note:'验证旧引擎兼容性' },
+];
+
+const stateText = { running:'运行中', stopped:'已停止', crashed:'已崩溃', transitional:'启动中' };
+
+/* ------------------------------------------------------------------ 状态 */
+const ui = { page:'instances', tab:'plugins', detailId:'workbench', filter:'all', keyword:'', compact:false, dark:false ,
+             showCreate:false, deepTint:false, logOpen:false };
+
+/* 实例色底：与 InstancesPage 的 InstanceCardPaint.Tint 同源 —— 10% 不透明度的淡色底叠在卡片底上
+   （0x1A ≈ 10%），因此浅色下是淡彩、深色下是暗彩，文字与图标在两套主题里都保持对比度。 */
+const TINT_ALPHA_LIGHT = 0.10;
+const TINT_ALPHA_DARK = 0.10;   // 与真实实现一致；想更明显可用说明浮层里的开关（16%）
+const TINT_ALPHA_DEEP = 0.16;
+
+function tintOf(hex, alpha) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || '').trim());
+  if (!m) return 'transparent';
+  const n = parseInt(m[1], 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+}
+
+function avatarBg(it) {
+  if (!it.color) return 'var(--card-bg)';   // meta.color 缺省时退回中性底（同 Neutral()）
+  const alpha = ui.dark && ui.deepTint ? TINT_ALPHA_DEEP
+    : ui.dark ? TINT_ALPHA_DARK : TINT_ALPHA_LIGHT;
+  return tintOf(it.color, alpha);
+}
+
+/* ------------------------------------------------------------------ 渲染 */
+const grid = document.getElementById('cardGrid');
+const emptyState = document.getElementById('emptyState');
+
+function matches(it) {
+  if (ui.filter === 'running' && it.state !== 'running') return false;
+  if (ui.filter === 'stopped' && it.state !== 'stopped') return false;
+  if (ui.filter === 'attention' && !it.problem) return false;
+  if (ui.keyword) {
+    const k = ui.keyword.toLowerCase();
+    const hay = [it.name, it.id, it.note].join(' ').toLowerCase();
+    if (!hay.includes(k)) return false;
+  }
+  return true;
+}
+
+function cardHtml(it) {
+  const dot = it.state;
+  const primary = it.state === 'running'
+    ? { text:'停止', cls:'' }
+    : it.state === 'crashed'
+      ? { text:'重启', cls:'accent' }
+      : { text:'启动', cls:'accent' };
+  return `
+  <div class="card">
+    <div class="card-top">
+      <div class="avatar" style="background:${avatarBg(it)}">${it.avatar}</div>
+      <div style="min-width:0">
+        <div class="card-name">${it.name}</div>
+        <div class="card-dir">${it.id}</div>
+      </div>
+    </div>
+    <div class="state-row">
+      <span class="dot ${dot}"></span>
+      <span class="state-label">${stateText[it.state]}</span>
+      ${it.endpoint ? `<span class="endpoint" title="${it.endpoint}">${it.endpoint}</span>` : ''}
+    </div>
+    <div class="meta">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M8 1.8l5.5 3v6.4L8 14.2 2.5 11.2V4.8z"/><path d="M2.5 4.8L8 7.8l5.5-3"/></svg>
+      <span>引擎 ${it.engine}</span><span class="sep">·</span><span>${it.deps} 个依赖</span><span class="sep">·</span><span>${it.last}</span>
+    </div>
+    ${it.problem ? `<div class="infobar">
+      <span class="icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M8 2l6 11H2z"/><path d="M8 6.5v3.2M8 11.4v.8"/></svg></span>
+      <div class="txt">${it.problem}</div></div>` : ''}
+    <div class="card-acts">
+      <button class="btn ${primary.cls}" style="min-width:112px" data-detail="${it.id}">${primary.text}</button>
+      ${it.state === 'running' ? '<button class="btn">打开界面</button>' : ''}
+      <button class="btn" data-detail="${it.id}">详情</button>
+      <span class="grow"></span>
+      <button class="btn" title="更多操作">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="3" cy="8" r="1.3"/><circle cx="8" cy="8" r="1.3"/><circle cx="13" cy="8" r="1.3"/></svg>
+      </button>
+    </div>
+  </div>`;
+}
+
+function renderCards() {
+  const list = instances.filter(matches);
+  grid.innerHTML = list.map(cardHtml).join('');
+  emptyState.hidden = list.length > 0;
+  document.getElementById('instCount').textContent = String(instances.length);
+  renderAttentionBar();
+}
+
+/* 页内降级提示条：与真实实现的 NeedsAttention / UpdateDegradeBar 同源，
+   「筛选里有、提示条里没有」的不一致因此不会出现。 */
+function renderAttentionBar() {
+  const attention = instances.filter(it => !!it.problem);
+  const bar = document.getElementById('attentionBar');
+  if (attention.length === 0) { bar.hidden = true; return; }
+  bar.hidden = false;
+  const names = attention.slice(0, 3).map(it => it.name).join('、');
+  const suffix = attention.length > 3 ? ` 等 ${attention.length} 个` : '';
+  document.getElementById('attentionText').innerHTML =
+    `<b>有实例需要处理</b>　${names}${suffix}：${attention[0].problem}`;
+}
+
+const detailTabs = { plugins:'插件', settings:'设置', saves:'存档', logs:'日志' };
+
+function renderDetail() {
+  const it = instances.find(x => x.id === ui.detailId) || instances[1];
+  document.getElementById('crumbName').textContent = it.name;
+  document.getElementById('crumbTab').textContent = detailTabs[ui.tab];
+  document.getElementById('detailName').textContent = it.name;
+  document.getElementById('detailDesc').textContent = `${it.id} · ${stateText[it.state]} · 引擎 ${it.engine}`;
+
+  const body = document.getElementById('detailBody');
+  if (ui.tab === 'plugins') {
+    body.innerHTML = `<div class="panel">
+      <h3>已安装插件</h3><div class="sub">来源：本地目录 / npm 包；停用时保留配置文件。</div>
+      <div class="rows">
+        <div class="row"><div class="t"><div class="n">dsh-cost-meter</div><div class="d">0.4.2 · npm</div></div><span class="switch on"></span><button class="btn">更多</button></div>
+        <div class="row"><div class="t"><div class="n">dsh-agent-teams</div><div class="d">1.1.0 · npm</div></div><span class="switch on"></span><button class="btn">更多</button></div>
+        <div class="row"><div class="t"><div class="n">本地插件 · csv-exporter</div><div class="d">0.0.7 · 本地目录</div></div><span class="switch"></span><button class="btn">更多</button></div>
+      </div>
+      <div style="margin-top:12px;display:flex;gap:8px"><button class="btn accent">安装插件…</button><button class="btn">刷新清单</button></div>
+    </div>`;
+  } else if (ui.tab === 'settings') {
+    body.innerHTML = `<div class="panel">
+      <h3>实例设置</h3><div class="sub">改动写入该实例的 instance.json。</div>
+      <div class="formgrid">
+        <div class="field"><label>实例名</label><div class="input">${it.name}</div></div>
+        <div class="field"><label>目录名（只读）</label><div class="input" style="color:var(--text-2)">${it.id}</div></div>
+        <div class="field"><label>引擎版本</label><div class="combo"><span>${it.engine}</span><span class="chev"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M2.5 4.5L6 8l3.5-3.5"/></svg></span></div></div>
+        <div class="field"><label>主页共享模式</label>
+          <div class="radio"><label><span class="rdot on"></span>独立</label><label><span class="rdot"></span>共享</label></div>
+        </div>
+        <div class="field"><label>备注</label><div class="input">${it.note || '（空）'}</div></div>
+      </div>
+      <div style="margin-top:16px;display:flex;gap:8px"><button class="btn accent">保存</button><button class="btn">还原</button></div>
+    </div>`;
+  } else if (ui.tab === 'saves') {
+    body.innerHTML = `<div class="panel">
+      <h3>存档</h3><div class="sub">home/ 下的会话与工作区存档。</div>
+      <div class="rows">
+        <div class="row"><div class="t"><div class="n">2026-02-14 10:12</div><div class="d">4 个会话 · 12.6 MB</div></div><button class="btn">打开</button><button class="btn">恢复</button></div>
+        <div class="row"><div class="t"><div class="n">2026-02-07 18:40</div><div class="d">3 个会话 · 9.8 MB</div></div><button class="btn">打开</button><button class="btn">恢复</button></div>
+      </div>
+    </div>`;
+  } else {
+    body.innerHTML = `<div class="panel">
+      <h3>实例日志</h3><div class="sub">logs/ 下的最新日志尾部（与右侧全局抽屉同源）。</div>
+      <div class="logbox">
+        <div class="lv-INFO">[10:24:01] 装载 instance.json（schema 1）</div>
+        <div class="lv-INFO">[10:24:01] 解析 profile ${it.id}</div>
+        <div class="lv-INFO">[10:24:02] 端口分配 7801（租约 30 min）</div>
+        <div class="lv-WARN">[10:24:03] 插件 csv-exporter 版本较旧，建议升级</div>
+        <div class="lv-INFO">[10:24:04] 就绪</div>
+      </div>
+    </div>`;
+  }
+}
+
+function render() {
+  renderCards();
+  // 页面可见性
+  ['instances','detail','engines','settings','create','about'].forEach(p => {
+    document.getElementById('page-' + p).hidden = (p !== ui.page);
+  });
+  // 左栏选中态：详情页仍归属「实例」功能
+  const selected = ui.page === 'detail' ? 'instances' : ui.page;
+  document.querySelectorAll('#navItems .nav-item').forEach(el => {
+    el.classList.toggle('selected', el.dataset.page === selected);
+  });
+  // 标题栏副标题
+  const sub = { instances:'实例', detail:'实例详情 · ' + detailTabs[ui.tab], engines:'引擎版本管理', settings:'全局设置', create:'新建实例', about:'关于' };
+  document.getElementById('tbSub').textContent = sub[ui.page] || '';
+  if (ui.page === 'detail') renderDetail();
+  // 主题
+  document.documentElement.setAttribute('data-theme', ui.dark ? 'dark' : 'light');
+  document.getElementById('themeLabel').textContent = ui.dark ? '深色' : '浅色';
+  // 选项
+  document.getElementById('navCreate').hidden = !ui.showCreate;
+  document.getElementById('win').classList.toggle('compact', ui.compact);
+  document.getElementById('swCreate').classList.toggle('on', ui.showCreate);
+  document.getElementById('swTint').classList.toggle('on', ui.deepTint);
+  document.getElementById('swCompact').classList.toggle('on', ui.compact);
+  document.getElementById('swDark').classList.toggle('on', ui.dark);
+  document.getElementById('logDrawer').classList.toggle('open', ui.logOpen);
+  document.getElementById('logToggle').classList.toggle('on', ui.logOpen);
+}
+
+function go(page) { ui.page = page; document.querySelector('.page:not([hidden])')?.scrollTo?.(0,0); render(); }
+
+/* ---------------------------------------------------------------- 事件 */
+/* 左栏与卡片的点击统一走事件委托：用 data-page / data-detail 表达意图。 */
+document.addEventListener('click', e => {
+  const nav = e.target.closest('.nav-item[data-page]');
+  if (nav) { go(nav.dataset.page); return; }
+  const hit = e.target.closest('[data-goto]');
+  if (hit) { go(hit.dataset.goto); return; }
+  const d = e.target.closest('[data-detail]');
+  if (d) { ui.detailId = d.dataset.detail; ui.page = 'detail'; ui.tab = 'plugins'; syncTabs(); render(); }
+});
+document.getElementById('detailTabs').addEventListener('click', e => {
+  const t = e.target.closest('.tab');
+  if (t) { ui.tab = t.dataset.tab; syncTabs(); render(); }
+});
+function syncTabs() {
+  document.querySelectorAll('#detailTabs .tab').forEach(t => t.classList.toggle('on', t.dataset.tab === ui.tab));
+}
+document.getElementById('statusFilter').addEventListener('click', e => {
+  const s = e.target.closest('.seg');
+  if (!s) return;
+  ui.filter = s.dataset.filter;
+  document.querySelectorAll('#statusFilter .seg').forEach(x => x.classList.toggle('on', x === s));
+  render();
+});
+document.getElementById('searchInput').addEventListener('input', e => { ui.keyword = e.target.value.trim(); render(); });
+document.getElementById('themeBtn').addEventListener('click', () => { ui.dark = !ui.dark; render(); });
+document.getElementById('paneToggle').addEventListener('click', () => { ui.compact = !ui.compact; render(); });
+document.getElementById('logToggle').addEventListener('click', () => { ui.logOpen = !ui.logOpen; render(); });
+document.getElementById('logDrawerClose').addEventListener('click', () => { ui.logOpen = false; render(); });
+document.getElementById('swCreate').addEventListener('click', () => { ui.showCreate = !ui.showCreate; render(); });
+document.getElementById('swTint').addEventListener('click', () => { ui.deepTint = !ui.deepTint; render(); });
+document.getElementById('swCompact').addEventListener('click', () => { ui.compact = !ui.compact; render(); });
+document.getElementById('swDark').addEventListener('click', () => { ui.dark = !ui.dark; render(); });
+document.getElementById('annotFold').addEventListener('click', () => {
+  const a = document.getElementById('annot');
+  a.classList.toggle('folded');
+  document.getElementById('annotFold').textContent = a.classList.contains('folded') ? '展开' : '收起';
+});
+
+render();
+</script>
+</body>
+</html>

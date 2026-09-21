@@ -186,7 +186,7 @@ desktop/build-app.ps1
 
 | # | 问题 | 影响 | 状态 |
 |---|---|---|---|
-| L1 | ~~P4 存档页无像素级证据~~ | ~~该页无法声明"通过视觉审计"~~ | ✅ **已解决**。本轮新增**调试深链** `WHALES_SMOKE_ROUTE`（取值 `instances` / `engines` / `create` / `settings` / `detail/first/<tab>`，其中 `first` 表示左栏第一个实例以免脚本硬编码 id；实现于 `MainWindow.xaml.cs` 的 `ApplySmokeRoute`），使任意页面都能被脚本直接截取。**无遗留阻断项。** |
+| L1 | ~~P4 存档页无像素级证据~~ | ~~该页无法声明"通过视觉审计"~~ | ✅ **已解决**。本轮新增**调试深链** `WHALES_SMOKE_ROUTE`（取值 `instances` / `engines` / `create` / `settings` / `about` / `detail/first/<tab>`，其中 `first` 表示状态源里的第一个实例以免脚本硬编码 id；实现于 `MainWindow.xaml.cs` 的 `ApplySmokeRoute`），使任意页面都能被脚本直接截取。**无遗留阻断项。** |
 
 ### 5.2 已知取舍（有意为之，非遗漏）
 
@@ -194,10 +194,10 @@ desktop/build-app.ps1
 |---|---|---|---|
 | L2 | `settings.yaml` 编辑器是**降级方案** | `TextBox` + 只读行号列（无语法着色、行号列与编辑区各自滚动），未做 WebView2 + Monaco | 规范 §6.6 允许降级；官方无代码编辑器控件 |
 | L3 | **主题不跟随系统** | 仅"深色 / 浅色" | 契约 `LauncherConfig.theme` 只有两个取值（规范 §11 U18 登记的契约缺口），已在界面显式说明 |
-| L4 | P1「更多」菜单**无"导出包 / 编辑实例"** | 提供等价的「编辑设置」→ 详情页设置页签 | 导出需接 `pack:export` + `host:saveFile` + `PackManifest`，本轮未做 |
-| L5 | P1 停在实例列表时**左栏无选中高亮** | 采纳方案 A（保持规范 §9.1 原样） | §9.1 的 `MenuItemsSource` 没有"实例列表"项，无可高亮对象；方案 B（加"实例列表"入口）会与 §9.1 的空态要求冲突 |
+| L4 | ~~P1「更多」菜单**无"导出包 / 编辑实例"**~~ | ~~提供等价的「编辑设置」→ 详情页设置页签~~ | ✅ **已补齐**：卡片「更多」新增「导出实例包…」（走 `pack:export` → 宿主 `host:saveFile`），页头新增「导入实例包」（走 `pack:import` → 宿主 `host:pickPackFile`）；「编辑实例」仍按原方案等价为「编辑设置」→ 详情页设置页签 |
+| L5 | ~~P1 停在实例列表时**左栏无选中高亮**~~ | ~~采纳方案 A（保持规范 §9.1 原样）~~ | ✅ **已解决**：左栏改为功能列表后，`MenuItems` 里的「实例」项在实例列表页（P1）与详情页都处于选中态 —— 路由是选中态的唯一来源（`MainWindow.SyncNavSelection`）。同一改造顺带消解了 L1 那条权宜逻辑：返回按钮恢复成规范 §6.1 的"仅详情页显示"，因为任意页面都能从「实例」项一键回到 P1 |
 | L6 | 卡片网格**右留白 ~223 epx、下留白 ~61 epx** | 保持常规网格语言（卡片从左排列、右侧自然留白） | 内容区 895 epx 只能放 2 列 320 卡（3 列需 976）；加 `MaxWidth` 夹列属审美偏好，规范未要求 |
-| L7 | 左栏**底部两项的图标位置**与设计稿略有差异 | 按官方 `NavigationView` `FooterMenuItems` 行为 | 未偏离规范 |
+| L7 | 左栏**底部两项的图标位置**与设计稿略有差异 | ~~按官方 `NavigationView` `FooterMenuItems` 行为~~ | ✅ **已复核**：底部现在只有一个固定项「关于」（FontIcon `E946`），位置与间距全部由框架默认给出，无自绘偏移；「引擎版本管理」「全局设置」已上移到主区（`MenuItems`），与视觉基准 `docs/design/demo/ui-function-nav.html` 一致 |
 
 ### 5.3 未覆盖路径（桥接层明确圈定）
 

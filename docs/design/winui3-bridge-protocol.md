@@ -2,7 +2,8 @@
 
 > **状态**：Lead 制定，冻结。Node 侧与 C# 侧必须严格照此实现。
 > **背景**：本轮把前端整体替换为 WinUI 3（C#/XAML）。`src/core/**`（约 7 000 行纯 Node/TS 业务逻辑，零 Electron 依赖）**保留复用**，由 C# 进程以子进程方式拉起，经 stdio 通信。
-> **替代关系**：本协议取代 Electron 的 `ipcMain.handle` / `contextBridge`。原有 39 条 IPC 通道的**语义与参数校验必须保留**，只换传输层。
+> **替代关系**：本协议取代 Electron 的 `ipcMain.handle` / `contextBridge`。原有 IPC 通道的**语义与参数校验必须保留**，只换传输层。
+> **通道总数**：40（原 39 + 本轮新增 `launcher:preflight`，见 §3.1 与 §7 变更记录）。
 
 ---
 
@@ -75,6 +76,21 @@
 
 分组（与 `CH` 同构）：`launcher:`、`instance:`、`engine:`、`plugin:`、`settings:`、`saves:`、`pack:`、`app:`。
 
+**本轮新增的通道**（旧 Electron 版没有对应能力，故不在 `ipc.ts` 里）：
+
+| 方法 | 参数 | 返回 | 说明 |
+|---|---|---|---|
+| `launcher:preflight` | `[options?: PreflightOptions]` | `PreflightReport` | 环境与依赖自检。检查数据目录 / 全局配置 / Node 运行时 / npm / dsh 引擎 / registry 连通性；`autoFix=true`（默认）时自动补齐本地项，`installEngine=true` 时会联网安装缺失引擎。 |
+
+关于 `launcher:preflight` 的三条实现约定：
+
+1. **参数校验**在 `desktop/bridge/validate.mjs` 的 `parsePreflightOptions`：只放行
+   `autoFix` / `installEngine` / `checkNetwork` / `refreshRuntime` / `registry` 五个字段，
+   未知字段直接 `ok:false` —— 这些开关能让 core 联网下载并安装依赖，不接受任意对象透传。
+2. **超时由调用方负责**：`installEngine=true` 且本机无引擎时会跑 npm 安装（首次可能数分钟），
+   C# 侧必须用长超时（`Services/PreflightService.cs` 的 `InstallTimeout`）。
+3. **单飞**：`src/core/preflight.ts` 对同一启动器根目录做了并发去重，界面连点不会跑两遍安装。
+
 **唯一事实源**：`src/shared/contracts.ts` 的 `CH` 与 `WhalesApi`。
 **参数校验的实现位置**：`desktop/bridge/validate.mjs`。这些校验原先来自 Electron 主进程的 `src/main/ipc.ts`（`must*` / `parseCreateInput` / `parseUpdatePatch` 白名单等），已**原样搬运、不放宽**。`src/main/**` 已于 commit `ed93af9` 物理删除；如需比对历史实现，用 `git show ed93af9^:src/main/ipc.ts`。
 
@@ -138,3 +154,16 @@
 ## 6. 变更流程
 
 本文档冻结。任何字段、方法名、语义变更须由 Lead 批准并**同时**更新本文档版本号与两端实现；禁止单侧先行修改。
+
+---
+
+## 7. 变更记录
+
+| 日期 | 变更 | 两端实现 | 说明 |
+|---|---|---|---|
+| 2026-09-21 | 新增 `launcher:preflight`（39 → 40 条通道） | Node：`src/core/preflight.ts` + `desktop/bridge/server.mjs` + `desktop/bridge/validate.mjs`；C#：`Services/Channels.cs` + `Services/PreflightService.cs` | 首次启动与「全局设置 → 环境自检」共用的环境与依赖自检。新增类型见 `contracts.ts` 的 `PreflightOptions` / `PreflightCheck` / `PreflightReport`；状态文件是 `<root>/cache/preflight.json`，**不改 `LauncherConfig`**（避免触碰冻结配置契约）。 |
+
+> 新增通道的验收证据（本机实测）：`__handshake` 返回 40 条通道且含 `launcher:preflight`；
+> 传入未知选项时桥接层返回 `ok:false`（`不支持的自检选项：bogusOption`）而不进入 core；
+> 自检后 `<root>/cache/preflight.json` 落盘。core 侧的逐项结论由
+> `tests/core/preflight.test.mjs`（10 个用例）覆盖。

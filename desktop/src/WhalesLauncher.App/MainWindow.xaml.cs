@@ -1,4 +1,5 @@
 using Microsoft.UI.Composition.SystemBackdrops;
+using Microsoft.UI;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
@@ -11,6 +12,7 @@ using WhalesLauncher.Models;
 using WhalesLauncher.Services;
 using WhalesLauncher.Shell;
 using Windows.Graphics;
+using Windows.UI;
 using WinRT.Interop;
 
 namespace WhalesLauncher;
@@ -35,8 +37,10 @@ public sealed partial class MainWindow : Window
     private const int MinimumHeight = 720;
 
     private readonly NavigationService _navigation;
-    private readonly InstanceRail _rail;
     private readonly LogDrawer _logDrawer;
+
+    /// <summary>启动自检的编排者（后端就绪后跑一次：本地修复 → 缺引擎时询问并自动装 → 首次弹报告）。</summary>
+    private readonly PreflightPresenter _preflight = new();
 
     /// <summary>程序性改选中项时置位，避免 SelectionChanged 递归导航。</summary>
     private bool _syncingSelection;
@@ -44,11 +48,16 @@ public sealed partial class MainWindow : Window
     /// <summary>首屏装载只做一次（Loaded 可能重复触发）。</summary>
     private bool _startupDone;
 
+    /// <summary>
+    /// 窗口对象。留字段是为了 <see cref="ApplyTitleBarButtonColors"/>：
+    /// 窗口控制按钮的配色在 <see cref="AppWindowTitleBar"/> 上，而它只能从 AppWindow 拿。
+    /// </summary>
+    private AppWindow? _appWindow;
+
     /// <summary>等待后端装配的轮询计时器（装配完成后立刻停掉并置空）。</summary>
     private Microsoft.UI.Dispatching.DispatcherQueueTimer? _readyTimer;
 
     private string _currentRoute = RouteKeys.Instances;
-    private object? _currentParameter;
 
     public MainWindow()
     {
@@ -65,14 +74,8 @@ public sealed partial class MainWindow : Window
         // 浮层宿主（§9.10）：Toast 需要宿主；ContentDialog 需要 XamlRoot（在 Loaded 后挂）
         AppServices.Toast.Attach(ToastLayer);
 
-        _rail = new InstanceRail(RootGrid.Resources);
-        Nav.MenuItemsSource = _rail.Items;
-
-        // 底部固定入口（§9.1）：引擎版本管理 / 全局设置。
-        // 同样走"数据对象 + MenuItemTemplate"：NavigationViewItem 会被套上该模板并让绑定失败，
-        // 实测会画出"空头像框 + 空警示图标"的垃圾行（见 RailEntry 类注释）。
-        Nav.FooterMenuItemsSource = _rail.FooterItems;
-
+        // 左栏（实例 / 引擎版本管理 / 全局设置 + 底部「关于」）在 MainWindow.xaml 里静态声明，
+        // 这里不再装配任何数据源；选中态由 OnFrameNavigated → SyncNavSelection 收敛。
         _logDrawer = new LogDrawer(
             RootGrid,
             LogDrawer,
@@ -93,6 +96,7 @@ public sealed partial class MainWindow : Window
         Closed += OnWindowClosed;
 
         UpdateThemeButton();
+        ApplyTitleBarButtonColors();
 
         // 首屏：实例列表（§9.1「无实例」时的空态由该页负责）
         _navigation.Navigate(RouteKeys.Instances);
@@ -100,7 +104,7 @@ public sealed partial class MainWindow : Window
         // 审计深链：设 WHALES_SMOKE_ROUTE 可让应用直接进入指定页面。
         // 目的：让「逐页视觉审计」能无人值守地截到任意页面 —— 此前 P4 存档页
         // 因 SelectorBar 不响应合成鼠标点击而拿不到截图（见交付报告 §5.1 L1）。
-        // 形如：instances | engines | create | settings | detail/first/saves
+        // 形如：instances | engines | create | settings | about | detail/first/saves
         ApplySmokeRoute();
     }
 
@@ -108,7 +112,8 @@ public sealed partial class MainWindow : Window
     /// 读取 <c>WHALES_SMOKE_ROUTE</c> 并导航（仅用于 QA / 自动化截图，未设该变量时是空操作）。
     ///
     /// 支持的取值：<c>instances</c> / <c>engines</c> / <c>create</c> / <c>settings</c> /
-    /// <c>detail/first/&lt;tab&gt;</c>（<c>first</c> 表示左栏第一个实例，避免脚本硬编码实例 id）。
+    /// <c>about</c> / <c>detail/first/&lt;tab&gt;</c>（<c>first</c> 表示状态源里的第一个实例，
+    /// 不依赖左栏 —— 左栏已改为静态功能列表）。
     /// 任何无法识别或无法完成的取值都静默保持首屏，绝不影响正常启动。
     ///
     /// <b>为什么要等</b>：本方法在外壳构造末尾调用，而外壳是"先建窗口、后装后端"
@@ -220,6 +225,10 @@ public sealed partial class MainWindow : Window
                     _navigation.Navigate(RouteKeys.Settings);
                     break;
 
+                case "about":
+                    _navigation.Navigate(RouteKeys.About);
+                    break;
+
                 default:
                     break;
             }
@@ -255,6 +264,7 @@ public sealed partial class MainWindow : Window
 
         var hwnd = WindowNative.GetWindowHandle(this);
         var appWindow = AppWindow.GetFromWindowId(Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hwnd));
+        _appWindow = appWindow;
 
         appWindow.Resize(new SizeInt32(InitialWidth, InitialHeight));
 
@@ -282,10 +292,12 @@ public sealed partial class MainWindow : Window
 
     private async void OnRootLoaded(object sender, RoutedEventArgs e)
     {
-        // ContentDialog 必须设 XamlRoot（§9.10.1）；Loaded 是 XamlRoot 可用的最早时机
+        // ContentDialog 必须设 XamlRoot（§9.10.1）；Loaded 是 XamlRoot 可用的最早时机。
+        // 一并把 RootGrid 交给对话框服务：对话框渲染在浮层里、**不继承** RequestedTheme，
+        // 由它把当前窗口主题显式传给每个对话框（否则深色窗口会弹出浅色对话框）。
         if (RootGrid.XamlRoot is not null)
         {
-            AppServices.Dialogs.Attach(RootGrid.XamlRoot);
+            AppServices.Dialogs.Attach(RootGrid.XamlRoot, RootGrid);
         }
 
         // 日志抽屉也要等 Loaded：它需要 DispatcherQueue 建刷新计时器
@@ -317,11 +329,36 @@ public sealed partial class MainWindow : Window
             _logDrawer.SubscribeToBackend();
 
             await LoadStartupStateAsync();
+
+            /*
+             * 环境与依赖自检（首次启动会弹报告、缺引擎会先问再自动装）。
+             *
+             * 放在首屏装载**之后**且不 await：自检里有 npm 探测这类秒级但非零的等待，
+             * 不能让它拖住第一帧；而它要弹对话框，又必须在 XamlRoot 已挂载之后
+             * （OnRootLoaded 里挂的，此时一定已好）。
+             */
+            _ = RunStartupPreflightAsync();
         }
         catch (Exception ex)
         {
             // async void 路径上的异常会直接崩进程：这里兜住并让用户看见（§9.0 错误不得只进日志）
             AppServices.Toast.Error("外壳初始化失败", ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// 跑启动自检。异常不外抛：<see cref="PreflightPresenter"/> 内部已把失败落成提示，
+    /// 这里只是最后一道"绝不让它崩掉外壳"的兜底。
+    /// </summary>
+    private async Task RunStartupPreflightAsync()
+    {
+        try
+        {
+            await _preflight.RunStartupAsync();
+        }
+        catch (Exception ex)
+        {
+            AppServices.Toast.Error("环境自检未能完成", ex.Message);
         }
     }
 
@@ -355,8 +392,10 @@ public sealed partial class MainWindow : Window
 
             timer.Stop();
             _readyTimer = null;
+
+            // 左栏是静态功能列表，后端没就绪也照常可用（点得动、只是页内没数据），
+            // 因此这里没有需要重建的东西 —— 保留提示，让用户知道内容为什么是空的。
             AppServices.Toast.Warning("后端尚未就绪", "实例列表与应用菜单暂时不可用。");
-            RebuildRail();
         };
 
         timer.Start();
@@ -394,7 +433,7 @@ public sealed partial class MainWindow : Window
             }
         }
 
-        RebuildRail();
+        // 日志抽屉的来源下拉**依赖实例列表**，这一句必须保留（交接文档 §11 列为最易误删的一行）
         _logDrawer.RebuildSources();
 
         await LoadAppMenuAsync();
@@ -429,7 +468,7 @@ public sealed partial class MainWindow : Window
 
     private void OnInstancesChanged(object? sender, EventArgs e)
     {
-        RebuildRail();
+        // 左栏是静态功能列表，不再随实例变化 —— 实例变化只影响日志抽屉的来源下拉。
         _logDrawer.RebuildSources();
     }
 
@@ -446,65 +485,17 @@ public sealed partial class MainWindow : Window
     }
 
     /* ------------------------------------------------------------------ *
-     * 左栏
+     * 左栏（功能列表）
      * ------------------------------------------------------------------ */
 
-    private void RebuildRail()
-    {
-        // 重建集合期间必须抑制选中事件。
-        //
-        // 原因（实测定位）：NavigationView 在 ItemsSource 被替换后会**自动选中第一项**，
-        // 于是 OnNavSelectionChanged 收到一条"用户选了第一个实例"的事件，并按硬编码的
-        // DetailTabs.Plugins 导航过去。这条自动导航会**覆盖**刚刚由深链建立的详情路由 ——
-        // 表现为 WHALES_SMOKE_ROUTE=detail/<id>/settings 进入后，标题栏、页签与面包屑
-        // 全部显示「插件」。诊断日志（两次 OnNavigatedTo，间隔 67ms）确认了这一点：
-        // 第一次是深链的 settings，第二次就是这个自动选中。
-        var previous = _syncingSelection;
-        _syncingSelection = true;
-        try
-        {
-            _rail.Rebuild(AppServices.IsReady ? AppServices.State.Instances : null, InstanceFilter.Text);
-        }
-        finally
-        {
-            _syncingSelection = previous;
-        }
-
-        // 重建会丢掉选中态，显式恢复一次（同时保证恢复动作本身不触发导航）。
-        SyncRailSelection();
-
-        // 再排一次到 UI 队列末尾。
-        //
-        // 为什么上面那次还不够：NavigationView 的"自动选中第一项"发生在 ItemsSource
-        // 替换**之后**，可能晚于本次同步。实测证据（tabdiag）：首个深链
-        // detail/<id>/settings 仍有第二次导航到 /plugins（间隔 91ms），而后来的
-        // saves / logs 只有一次 —— 差别就在于首个深链正好撞上这个窗口。
-        // 排到 Low 优先级可确保自动选中已经落地，再收敛一次即可；
-        // 没有自动选中时这一步是幂等的。
-        var dispatcher = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
-        if (dispatcher is not null)
-        {
-            dispatcher.TryEnqueue(
-                Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
-                () =>
-                {
-                    var restore = _syncingSelection;
-                    _syncingSelection = true;
-                    try
-                    {
-                        SyncRailSelection();
-                    }
-                    finally
-                    {
-                        _syncingSelection = restore;
-                    }
-                });
-        }
-    }
-
-    private void OnInstanceFilterChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args) =>
-        RebuildRail();
-
+    /// <summary>
+    /// 左栏选中项 → 路由。左栏是静态功能列表（见 <c>MainWindow.xaml</c>），<c>Tag</c> 即路由键。
+    ///
+    /// 这里不再需要"重建集合期间抑制选中事件"的对抗代码：静态项永远不会被替换，
+    /// 框架也就不会在 ItemsSource 替换后自动选中第一项 —— 旧实现要用
+    /// <c>_syncingSelection</c> 加上"排到 Low 优先级再收敛一次"来压住那次自动选中，
+    /// 否则它会把深链建立的详情页签覆盖成「插件」（交接文档 §5.2）。
+    /// </summary>
     private void OnNavSelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
     {
         if (_syncingSelection)
@@ -512,54 +503,64 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        if (args.SelectedItem is not RailEntry row)
+        if (args.SelectedItem is not NavigationViewItem item)
         {
             return;
         }
 
-        switch (row.Kind)
+        switch (item.Tag as string)
         {
-            case RailEntryKind.Instance:
-                _navigation.NavigateToDetail(row.InstanceId, DetailTabs.Plugins);
+            case RouteKeys.Instances:
+                _navigation.Navigate(RouteKeys.Instances);
                 break;
 
-            case RailEntryKind.NewInstance:
-                _navigation.Navigate(RouteKeys.Create);
-                break;
-
-            case RailEntryKind.EngineVersions:
+            case RouteKeys.Engines:
                 _navigation.Navigate(RouteKeys.Engines);
                 break;
 
-            case RailEntryKind.Settings:
+            case RouteKeys.Settings:
                 _navigation.Navigate(RouteKeys.Settings);
                 break;
 
+            case RouteKeys.About:
+                _navigation.Navigate(RouteKeys.About);
+                break;
+
             default:
-                // 「分隔线」与「无匹配实例」不可导航：把选中项退回当前路由对应的行，
-                // 避免留下一个假的选中态（点了没反应比点错更让人困惑）
-                SyncRailSelection();
+                // 未知 Tag（理论上不存在）不导航，但要把选中态收敛回当前路由：
+                // 否则会留下一个"点了没反应却高亮着"的假选中态。
+                SyncNavSelection();
                 break;
         }
     }
 
-    /// <summary>把左栏选中项同步到当前路由（导航后重建集合会丢掉选中态，必须显式恢复）。</summary>
-    private void SyncRailSelection()
+    /// <summary>
+    /// 路由 → 左栏选中项。详情页归属「实例」功能；实例列表页同样选中「实例」。
+    ///
+    /// 这一条同时修掉了旧左栏的登记缺陷：旧左栏没有"实例列表"这一项，
+    /// 于是 P1 停在实例列表时左栏没有任何高亮（交付报告 §1 的 L5）。
+    /// </summary>
+    private void SyncNavSelection()
     {
+        var previous = _syncingSelection;
         _syncingSelection = true;
         try
         {
             Nav.SelectedItem = _currentRoute switch
             {
-                RouteKeys.Detail when _currentParameter is DetailNavArgs args => _rail.Find(args.InstanceId),
-                RouteKeys.Engines => _rail.FindFooter(RailEntryKind.EngineVersions),
-                RouteKeys.Settings => _rail.FindFooter(RailEntryKind.Settings),
+                RouteKeys.Instances or RouteKeys.Detail => NavInstances,
+                RouteKeys.Engines => NavEngines,
+                RouteKeys.Settings => NavSettings,
+                RouteKeys.About => NavAbout,
+
+                // 新建实例（WizardPage）不对应任何功能项：不选中任何项，而不是硬塞给
+                // 「实例」—— 那会让人以为向导页就是实例列表。
                 _ => null,
             };
         }
         finally
         {
-            _syncingSelection = false;
+            _syncingSelection = previous;
         }
     }
 
@@ -570,16 +571,19 @@ public sealed partial class MainWindow : Window
     private void OnFrameNavigated(object sender, NavigationEventArgs e)
     {
         _currentRoute = RouteOf(e.SourcePageType);
-        _currentParameter = e.Parameter;
 
         AppTitleBar.Subtitle = SubtitleFor(_currentRoute, e.Parameter);
 
-        // 规范 §6.1 的返回按钮只在详情页显示；这里放宽为"任何非首屏路由且可后退"——
-        // 因为 §9.1 的左栏没有"实例列表"入口，若 P6/P7/P8 也隐藏返回，首屏之后就没有
-        // 任何路径能回到实例列表（P1 将不可达）。已在回复中登记该偏离。
-        AppTitleBar.IsBackButtonVisible = ContentFrame.CanGoBack && _currentRoute != RouteKeys.Instances;
+        // 规范 §6.1：返回按钮只在详情页显示。
+        //
+        // 这里曾是"任何非首屏路由且可后退"的权宜版本：旧左栏没有「实例列表」入口，
+        // 若在 P6/P7/P8 也隐藏返回，首屏之后就没有任何路径能回到实例列表（P1 不可达）。
+        // 左栏改成功能列表后这条理由不再成立 —— 「实例」项在任意页面都一键可达，
+        // 因此恢复规范原文的语义（交接文档 §5.2）。
+        AppTitleBar.IsBackButtonVisible = ContentFrame.CanGoBack && _currentRoute == RouteKeys.Detail;
 
-        SyncRailSelection();
+        // 路由是选中态的唯一来源：Frame 自身是外壳唯一可信的"当前在哪一页"。
+        SyncNavSelection();
     }
 
     private void OnBackRequested(Microsoft.UI.Xaml.Controls.TitleBar sender, object args) => _navigation.GoBack();
@@ -592,6 +596,7 @@ public sealed partial class MainWindow : Window
         if (pageType == typeof(Views.EnginesPage)) return RouteKeys.Engines;
         if (pageType == typeof(Views.WizardPage)) return RouteKeys.Create;
         if (pageType == typeof(Views.SettingsPage)) return RouteKeys.Settings;
+        if (pageType == typeof(Views.AboutPage)) return RouteKeys.About;
         return string.Empty;
     }
 
@@ -602,6 +607,7 @@ public sealed partial class MainWindow : Window
         RouteKeys.Engines => "引擎版本管理",
         RouteKeys.Create => "新建实例",
         RouteKeys.Settings => "全局设置",
+        RouteKeys.About => "关于",
         _ => string.Empty,
     };
 
@@ -632,6 +638,7 @@ public sealed partial class MainWindow : Window
         };
 
         UpdateThemeButton();
+        ApplyTitleBarButtonColors();
     }
 
     private async void OnThemeButtonClick(object sender, RoutedEventArgs e)
@@ -656,7 +663,68 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void OnActualThemeChanged(FrameworkElement sender, object args) => UpdateThemeButton();
+    private void OnActualThemeChanged(FrameworkElement sender, object args)
+    {
+        UpdateThemeButton();
+
+        // Default（跟随系统）时系统主题一变 ActualTheme 就变，标题栏三个窗口按钮的配色
+        // 必须跟着走 —— 否则又会回到"深色窗户上是深色按钮"的不可见状态。
+        ApplyTitleBarButtonColors();
+    }
+
+    /// <summary>
+    /// 标题栏右侧的三个窗口按钮（最小化 / 最大化 / 关闭）给足对比度。
+    ///
+    /// 为什么必须自己设：这三个按钮**不是窗口内容**，由系统按**系统主题**绘制，
+    /// 不跟随 <c>RootGrid.RequestedTheme</c>。于是"深色窗口跑在浅色系统上"时，
+    /// 按钮字形与深色标题栏同为暗色 —— 用户实测反馈"深色模式下三个按钮几乎不可见"。
+    /// 这里按**当前生效主题**显式配色，两套主题都有对比度。
+    ///
+    /// 注意 API 归属：这些颜色在 <see cref="AppWindowTitleBar"/> 上，**不是** XAML
+    /// <c>TitleBar</c> 控件的属性（后者只有 Title/Subtitle/IconSource/IsBackButtonVisible 等）。
+    /// 它们同样只在 <c>ExtendsContentIntoTitleBar == true</c> 时可用（见 <see cref="ConfigureWindow"/>）。
+    ///
+    /// 颜色用不透明的纯黑/纯白（Fluent 的窗口按钮就是如此），背景保持透明让 Mica 透出来，
+    /// 只在悬停/按下时叠一层很淡的覆盖色。
+    /// </summary>
+    private void ApplyTitleBarButtonColors()
+    {
+        var titleBar = _appWindow?.TitleBar;
+        if (titleBar is null || !AppWindowTitleBar.IsCustomizationSupported())
+        {
+            // 不支持定制的系统（旧版 Windows）上，系统自己会按系统主题绘制 —— 不强改。
+            return;
+        }
+
+        // RequestedTheme 为 Default 时不能直接比较枚举值：Default 表示"跟随系统"，
+        // 真正生效的是 ActualTheme。
+        var effective = RootGrid.RequestedTheme == ElementTheme.Default
+            ? RootGrid.ActualTheme
+            : RootGrid.RequestedTheme;
+
+        var dark = effective == ElementTheme.Dark;
+
+        var foreground = dark ? Colors.White : Colors.Black;
+        var inactiveForeground = dark
+            ? Color.FromArgb(0x78, 0xFF, 0xFF, 0xFF)
+            : Color.FromArgb(0x78, 0x00, 0x00, 0x00);
+        var hoverBackground = dark
+            ? Color.FromArgb(0x18, 0xFF, 0xFF, 0xFF)
+            : Color.FromArgb(0x14, 0x00, 0x00, 0x00);
+        var pressedBackground = dark
+            ? Color.FromArgb(0x28, 0xFF, 0xFF, 0xFF)
+            : Color.FromArgb(0x20, 0x00, 0x00, 0x00);
+
+        titleBar.ButtonForegroundColor = foreground;
+        titleBar.ButtonHoverForegroundColor = foreground;
+        titleBar.ButtonPressedForegroundColor = foreground;
+        titleBar.ButtonInactiveForegroundColor = inactiveForeground;
+
+        titleBar.ButtonBackgroundColor = Colors.Transparent;
+        titleBar.ButtonInactiveBackgroundColor = Colors.Transparent;
+        titleBar.ButtonHoverBackgroundColor = hoverBackground;
+        titleBar.ButtonPressedBackgroundColor = pressedBackground;
+    }
 
     private void UpdateThemeButton()
     {

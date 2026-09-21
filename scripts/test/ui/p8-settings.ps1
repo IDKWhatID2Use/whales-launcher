@@ -43,22 +43,24 @@ try {
     $reachedVia = 'deep link'
     if (-not $deepLinkOk) {
         Add-UiDiagnostic -Case $case -Text 'deep link settings did not build the page; falling back to the navigation rail'
-        # The rail rows surface as ListItems whose UIA Name is the CLR type name
-        # ('WhalesLauncher.Shell.RailEntry'), so the entry is located by the text
-        # of its children instead of by name.
+        # The rail is a static feature list now: each entry is a NavigationViewItem
+        # carrying an explicit AutomationProperties.Name, and 全局设置 moved from
+        # the footer up into the main MenuItems group. The entry is therefore
+        # located by its exact UIA name under MenuItemsHost - the old "walk the
+        # footer rows and match their child text" dance existed only because the
+        # rows were RailEntry data objects whose UIA name was the CLR type name
+        # ('WhalesLauncher.Shell.RailEntry'); those objects are gone.
         $railEntry = $null
         $railDeadline = [DateTime]::UtcNow.AddSeconds(25)
         while ($null -eq $railEntry -and [DateTime]::UtcNow -lt $railDeadline) {
-            $footer = Find-ByAutomationId -Id 'FooterMenuItemsHost' -Scope (Get-UiRoot -Hwnd $app.Hwnd) -Exact -TimeoutMs 1500 -AllowMissing
-            if ($footer) {
-                foreach ($row in @(Get-UiChildrenOfType -Element $footer -ControlType 'ListItem')) {
-                    if ((@(Get-UiTexts -Scope $row.Element)) -contains $ctx.labels.shell.railSettings) { $railEntry = $row; break }
-                }
+            $menu = Find-ByAutomationId -Id 'MenuItemsHost' -Scope (Get-UiRoot -Hwnd $app.Hwnd) -Exact -TimeoutMs 1500 -AllowMissing
+            if ($menu) {
+                $railEntry = Find-ByName -Name $ctx.labels.shell.railSettings -Scope $menu -Exact -TimeoutMs 800 -AllowMissing
             }
             if ($null -eq $railEntry) { Start-Sleep -Milliseconds 700 }
         }
-        if ($null -eq $railEntry) { throw "entry point missing: neither the settings deep link nor a '$($ctx.labels.shell.railSettings)' rail row" }
-        Select-Element -Element $railEntry.Element
+        if ($null -eq $railEntry) { throw "entry point missing: neither the settings deep link nor a '$($ctx.labels.shell.railSettings)' rail entry" }
+        Select-Element -Element $railEntry
         $entered = Wait-Until -TimeoutMs 25000 -Message 'settings via rail' -Condition {
             $null -ne (Find-ByAutomationId -Id $L.themeRadiosAid -Scope (Get-UiRoot -Hwnd $app.Hwnd) -Exact -TimeoutMs 800 -AllowMissing)
         }

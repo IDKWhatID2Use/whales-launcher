@@ -293,9 +293,9 @@ desktop/
 │   └── config-store.mjs  #   launcher.json 读写
 └── src/WhalesLauncher.App/
     ├── App.xaml(.cs)     # 应用入口与后台装配
-    ├── MainWindow.xaml   # 应用外壳（标题栏 / 左实例栏 / 日志抽屉 / 菜单）
-    ├── Shell/            # 外壳组件（菜单构建、实例栏、日志抽屉、宿主方法注册）
-    ├── Views/            # 8 个页面（Instances / InstanceDetail+Detail / Engines / Wizard / Settings）
+    ├── MainWindow.xaml   # 应用外壳（标题栏 / 左功能栏 / 日志抽屉 / 菜单）
+    ├── Shell/            # 外壳组件（菜单构建、日志抽屉、宿主方法注册）
+    ├── Views/            # 9 个页面（Instances / InstanceDetail+Detail / Engines / Wizard / Settings / About）
     ├── Controls/         # 跨页共享控件（PageHeader / ToastHost）
     ├── Services/         # CoreBridge（NDJSON 客户端）、AppState、导航、格式化、校验、对话框
     ├── Models/           # 契约镜像（src/shared/contracts.ts 的机械对应）

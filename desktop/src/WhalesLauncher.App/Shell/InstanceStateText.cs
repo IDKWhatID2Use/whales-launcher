@@ -3,10 +3,10 @@ using WhalesLauncher.Models;
 namespace WhalesLauncher.Shell;
 
 /// <summary>
-/// 实例运行状态 → 中文标签与状态点样式键。
+/// 实例运行状态 → 中文标签。
 ///
 /// 存在理由：规范 §8.2 要求「状态不能只靠颜色表达」，所以状态文字与状态点是**成对**出现的；
-/// 外壳左栏、P1 卡片、页头都需要同一份映射，各写一份必然漂移。
+/// P1 卡片、详情页与详情页头都需要同一份映射，各写一份必然漂移。
 ///
 /// 归属说明：本文件在外壳写范围内（不在 <c>Services/</c>）。若 W-P1 也要用，
 /// 由 Lead 决定是否提升到 <c>Services/</c> —— 这里先公开，避免第三份实现。
@@ -26,18 +26,5 @@ public static class InstanceStateText
         InstanceStateValues.Stopped => "已停止",
         null or "" => "状态未知",
         _ => state,
-    };
-
-    /// <summary>
-    /// 状态点样式键。样式定义在 <c>MainWindow.xaml</c> 的 <c>RootGrid.Resources</c>：
-    /// 颜色写在 Style 的 Setter 里用 <c>{ThemeResource}</c> 求值 —— 若在 code-behind 里
-    /// 直接取画刷对象，切换主题后状态点会停在旧主题的颜色（规范 §1.3 明令禁止）。
-    /// </summary>
-    public static string DotStyleKey(string? state) => state switch
-    {
-        InstanceStateValues.Running => "RailDotRunning",
-        InstanceStateValues.Starting or InstanceStateValues.Stopping => "RailDotTransitional",
-        InstanceStateValues.Crashed => "RailDotCrashed",
-        _ => "RailDotStopped",
     };
 }

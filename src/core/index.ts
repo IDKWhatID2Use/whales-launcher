@@ -52,6 +52,7 @@ import {
   attachEngineFromLocal,
   computeEngineSize,
   installEngine,
+  latestEngineVersion,
   listAvailableEngines,
   listEngines,
   removeEngine,
@@ -65,6 +66,7 @@ import {
 } from './profile';
 import { pluginAdd, pluginRemove } from './plugins';
 import { installPlugin, listInstancePlugins, pluginsDir, removeInstancePlugin } from './plugin-packs';
+import { PREFLIGHT_STATUS_LABELS, readPreflightState, runPreflight } from './preflight';
 import { allRuntimes, describeStopFailure, explainLaunchFailure, instanceRuntime, launchInstance, stopInstance } from './launch';
 import { resetNodeRuntimeCache, resolveNodeRuntime } from './node-runtime';
 import { listSessions, workspaceKeyFor } from './saves';
@@ -82,6 +84,13 @@ const coreExtras = {
   clearShareConflicts,
   /** 由 UI 决定如何解决设置冲突：`use-local` 或 `use-shared`（覆盖前自动备份）。 */
   resolveSettingsConflict,
+  /**
+   * 查询 npm registry 上 `latest` dist-tag 指向的 dsh 版本。
+   *
+   * 供环境自检在"一个引擎都没有"时决定装哪个版本（`preflight.ts` 内部也用它），
+   * 以及界面提供"安装最新版"入口时复用同一份判定。
+   */
+  latestEngineVersion,
   /** 把一个本地已存在的 dsh 安装用 junction 接入引擎目录（离线铺设，不联网）。 */
   attachEngineFromLocal,
   /** 读取实例包元数据（导入前预览）。 */
@@ -154,6 +163,9 @@ export const core: CoreApi & typeof coreExtras = {
   removeEngine,
   resolveEngineBin,
 
+  /* preflight */
+  runPreflight,
+
   /* profile / settings */
   readProfileInventory,
   readInstanceSettings,
@@ -214,6 +226,15 @@ export {
   runtimeOf,
   setRuntimeState,
 };
+export {
+  PREFLIGHT_STATE_FILE,
+  PREFLIGHT_STATE_SCHEMA,
+  PREFLIGHT_STATUS_LABELS,
+  formatDuration,
+  readPreflightState,
+  runPreflight,
+} from './preflight';
+export type { PreflightState } from './preflight';
 export type { InstanceRemovalReport, InstanceSummaryExt, ShareConflict };
 /* 内部工具的测试出口（纯函数，供 tests/core/plugin-packs.test.mjs 直接验证）。 */
 export { __test as pluginPacksTest } from './plugin-packs';
@@ -225,7 +246,9 @@ export * as profile from './profile';
 export * as engine from './engine';
 export * as instance from './instance';
 export * as plugins from './plugins';
-export * as pluginPacks from './plugin-packs';export * as launch from './launch';
+export * as pluginPacks from './plugin-packs';
+export * as preflight from './preflight';
+export * as launch from './launch';
 export * as nodeRuntime from './node-runtime';
 export * as saves from './saves';
 export * as modpack from './modpack';

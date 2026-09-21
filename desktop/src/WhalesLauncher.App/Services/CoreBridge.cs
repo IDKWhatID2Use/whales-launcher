@@ -114,10 +114,19 @@ public static class NodeRuntimeLocator
     /// 探测全部候选并给出报告（**永不抛错**；失败原因都在报告里）。
     /// 供设置页"检测 Node 运行时"的**本地**诊断路径复用。
     /// </summary>
-    public static async Task<NodeRuntimeReport> ResolveAsync(string? configuredPath = null, CancellationToken ct = default)
+    /// <param name="configuredPath">全局设置里指定的 node 路径（可选）。</param>
+    /// <param name="home">
+    /// 启动器根目录。给了才会把**自备运行时**（<c>&lt;home&gt;/runtime/node/node.exe</c>，
+    /// 由环境自检下载，见 <see cref="NodeProvisioner"/>）纳入候选。
+    /// </param>
+    /// <param name="ct">取消令牌。</param>
+    public static async Task<NodeRuntimeReport> ResolveAsync(
+        string? configuredPath = null,
+        string? home = null,
+        CancellationToken ct = default)
     {
         var candidates = new List<NodeRuntimeCandidate>();
-        foreach (var (file, source) in CollectCandidates(configuredPath))
+        foreach (var (file, source) in CollectCandidates(configuredPath, home))
         {
             ct.ThrowIfCancellationRequested();
             var candidate = await ProbeAsync(file, source, ct).ConfigureAwait(false);
@@ -153,9 +162,15 @@ public static class NodeRuntimeLocator
     /// 取一个**确认可用**的 node 绝对路径；找不到时抛 <see cref="InvalidOperationException"/>，
     /// 消息里带上每个候选的中文失败原因（可直接展示给用户，不需要再翻译）。
     /// </summary>
-    public static async Task<string> RequireAsync(string? configuredPath = null, CancellationToken ct = default)
+    /// <param name="configuredPath">全局设置里指定的 node 路径（可选）。</param>
+    /// <param name="home">启动器根目录（用于纳入自备运行时；见 <see cref="ResolveAsync"/>）。</param>
+    /// <param name="ct">取消令牌。</param>
+    public static async Task<string> RequireAsync(
+        string? configuredPath = null,
+        string? home = null,
+        CancellationToken ct = default)
     {
-        var report = await ResolveAsync(configuredPath, ct).ConfigureAwait(false);
+        var report = await ResolveAsync(configuredPath, home, ct).ConfigureAwait(false);
         if (report.Ok && report.File is not null) return report.File;
 
         var detail = report.Candidates.Count == 0
@@ -173,6 +188,7 @@ public static class NodeRuntimeLocator
         NodeRuntimeSourceValues.Config => "显式配置",
         NodeRuntimeSourceValues.Current => "启动器自身进程",
         NodeRuntimeSourceValues.Path => "系统 PATH",
+        NodeRuntimeSourceValues.Portable => "启动器自备运行时",
         NodeRuntimeSourceValues.Common => "常见安装位置",
         _ => source,
     };
@@ -181,7 +197,9 @@ public static class NodeRuntimeLocator
     /// 枚举候选（已去重）；**显式来源（配置/环境变量）即使文件不存在也入列** ——
     /// 用户手填错路径时必须能看到"这个路径不存在"，而不是被静默跳过、让人以为配置没生效。
     /// </summary>
-    private static List<(string File, string Source)> CollectCandidates(string? configuredPath)
+    /// <param name="configuredPath">全局设置里指定的 node 路径。</param>
+    /// <param name="home">启动器根目录（null 时不枚举自备运行时）。</param>
+    private static List<(string File, string Source)> CollectCandidates(string? configuredPath, string? home)
     {
         var outList = new List<(string, string)>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -207,6 +225,13 @@ public static class NodeRuntimeLocator
         Push(configuredPath, NodeRuntimeSourceValues.Config, explicitSource: true);
         Push(Environment.GetEnvironmentVariable(NodePathEnvVar), NodeRuntimeSourceValues.Env, explicitSource: true);
         foreach (var file in FindOnPath()) Push(file, NodeRuntimeSourceValues.Path, explicitSource: false);
+        // 自备运行时排在系统 PATH **之后**、常见安装位置**之前**：用户自己装好的 Node 优先沿用，
+        // 而"启动器亲手铺设并验证过"的这一份比各种猜测出来的安装位置更确定。
+        if (!string.IsNullOrWhiteSpace(home))
+        {
+            Push(NodeProvisioner.PortableNodeExe(home), NodeRuntimeSourceValues.Portable, explicitSource: false);
+        }
+
         foreach (var file in CommonInstallPaths()) Push(file, NodeRuntimeSourceValues.Common, explicitSource: false);
         return outList;
     }
@@ -622,7 +647,9 @@ public sealed class CoreBridge : IAsyncDisposable
             }
 
             Home = _options.HomeDir is { Length: > 0 } home ? Path.GetFullPath(home) : ResolveDefaultHome();
-            NodeExecutable = _options.NodePath is { Length: > 0 } node ? node : await NodeRuntimeLocator.RequireAsync(null, ct).ConfigureAwait(false);
+            NodeExecutable = _options.NodePath is { Length: > 0 } node
+                ? node
+                : await NodeRuntimeLocator.RequireAsync(null, Home, ct).ConfigureAwait(false);
 
             var workingDirectory = _options.WorkingDirectory is { Length: > 0 } wd ? wd : Home;
             if (!Directory.Exists(workingDirectory)) Directory.CreateDirectory(workingDirectory);
@@ -647,6 +674,24 @@ public sealed class CoreBridge : IAsyncDisposable
             psi.Environment["WHALES_LAUNCHER_ROOT"] = Home;
             psi.Environment.Remove("ELECTRON_RUN_AS_NODE");
             psi.Environment.Remove("NODE_OPTIONS");
+
+            /*
+             * 把所用 Node 的所在目录前置到子进程 PATH。
+             *
+             * 自备运行时（<home>/runtime/node）不在系统 PATH 上 —— 我们是用绝对路径把它跑起来的，
+             * 但 dsh 自己、以及它拉起的 pnpm / 插件安装脚本都会**按名字**找 node / npm。
+             * 少了这一行，"引擎装上了却起不来"会变成一个极难定位的问题。
+             */
+            var nodeDir = Path.GetDirectoryName(NodeExecutable);
+            if (!string.IsNullOrEmpty(nodeDir))
+            {
+                var inherited = psi.Environment.TryGetValue("PATH", out var own) && !string.IsNullOrEmpty(own)
+                    ? own
+                    : Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
+                psi.Environment["PATH"] = inherited.Length > 0
+                    ? nodeDir + Path.PathSeparator + inherited
+                    : nodeDir;
+            }
 
             var process = new Process { StartInfo = psi, EnableRaisingEvents = true };
             process.Exited += OnProcessExited;

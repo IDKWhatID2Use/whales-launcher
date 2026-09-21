@@ -24,8 +24,14 @@
  * 2. launcher.json 的 nodePath（界面可配，用户显式指定）
  * 3. 启动器自身进程           （开发模式下 `node scripts/launch.mjs` 就是真 node）
  * 4. 系统 PATH 上的 node.exe  （常规安装的 Node.js）
- * 5. 常见安装位置             （PATH 未刷新/由 IDE 启动时的兜底）
+ * 5. 启动器自备运行时         （`<root>/runtime/node/node.exe`，首次启动自检下载的便携版）
+ * 6. 常见安装位置             （PATH 未刷新/由 IDE 启动时的兜底）
  * ```
+ *
+ * 第 5 项是"零手动安装"的兜底：系统一个 Node 都没有时，首次启动自检会下载一份便携版
+ * 放在启动器根下（见 `node-provision.ts`）；它排在系统 PATH **之后**，因此用户自己
+ * 装好的 Node 仍然优先被沿用。判定成功后其所在目录会被登记为额外命令目录
+ * （`proc.ts` 的 `setExtraCommandDirs`），让 `npm` / `pnpm` 一起被找到。
  *
  * 每个候选都会**实际跑一次探针**（`node -e` 打印 `process.versions`），只有
  * "不是 Electron" 且 "主版本 >= {@link MIN_NODE_MAJOR}" 的才算合格 —— 不做任何
@@ -34,8 +40,8 @@
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import type { NodeRuntimeCandidate, NodeRuntimeReport, NodeRuntimeSource } from '../shared/contracts';
-import { LAUNCHER_CONFIG_FILE } from './paths';
-import { runCapture } from './proc';
+import { LAUNCHER_CONFIG_FILE, portableNodeExe } from './paths';
+import { runCapture, setExtraCommandDirs } from './proc';
 
 /** 运行时来源（用于诊断展示；顺序即优先级）。 */
 export type { NodeRuntimeCandidate, NodeRuntimeReport, NodeRuntimeSource };
@@ -58,6 +64,7 @@ const SOURCE_LABELS: Record<NodeRuntimeSource, string> = {
   config: '全局设置的 Node 运行时路径',
   current: '启动器自身进程',
   path: '系统 PATH',
+  portable: '启动器自备运行时',
   common: '常见安装位置',
 };
 
@@ -100,10 +107,19 @@ export async function resolveNodeRuntime(
   }
 
   const candidates: NodeRuntimeCandidate[] = [];
-  for (const candidate of collectCandidates(configured, fromEnv)) {
+  for (const candidate of collectCandidates(configured, fromEnv, options.root)) {
     candidates.push(await probe(candidate.file, candidate.source, options.captureDir));
     const last = candidates[candidates.length - 1] as NodeRuntimeCandidate;
     if (last.ok) {
+      /*
+       * 把这个运行时的目录登记为「额外命令目录」。
+       *
+       * 自备运行时（`<root>/runtime/node`，由首次自检下载）**不在系统 PATH 上** ——
+       * 它是 C# 宿主用绝对路径拉起来的。不登记的话 `resolveCommand('npm')` 会在 PATH
+       * 里一无所获，于是「引擎装不上、插件装不上、版本查不了」，而运行时其实就在手边。
+       * 登记必须发生在**判定成功之后**：只有这里确知哪个 node 真的能跑。
+       */
+      setExtraCommandDirs([path.dirname(last.file)]);
       const report: NodeRuntimeReport = {
         ok: true,
         file: last.file,
@@ -116,6 +132,9 @@ export async function resolveNodeRuntime(
       return report;
     }
   }
+
+  // 一个可用的都没有：清空登记，避免把上一次结论里的目录继续喂给子进程 PATH。
+  setExtraCommandDirs([]);
 
   const report: NodeRuntimeReport = {
     ok: false,
@@ -165,11 +184,13 @@ export function describeNodeCandidates(report: NodeRuntimeReport): string {
  * 枚举候选运行时（已去重、已过滤掉不存在的路径）。
  * @param configured 全局设置里指定的路径。
  * @param fromEnv 环境变量里的路径。
+ * @param root 启动器根目录（用于把自备运行时纳入候选；未提供时跳过该项）。
  * @returns 候选列表（顺序即优先级）。
  */
 function collectCandidates(
   configured: string | null,
   fromEnv: string | null,
+  root: string | undefined,
 ): Array<{ file: string; source: NodeRuntimeSource }> {
   const out: Array<{ file: string; source: NodeRuntimeSource }> = [];
   const seen = new Set<string>();
@@ -182,7 +203,7 @@ function collectCandidates(
     /*
      * 显式来源（环境变量 / 全局设置）**即使路径不存在也要入列**：用户手填错了路径时，
      * 报告里必须能看到"这个路径不存在"，而不是被静默跳过、让人以为配置没生效。
-     * 自动发现的候选（current/path/common）才做存在性预过滤，避免噪音。
+     * 自动发现的候选（current/path/portable/common）才做存在性预过滤，避免噪音。
      */
     const explicit = source === 'env' || source === 'config';
     if (!explicit && !existsSync(resolved)) return;
@@ -193,6 +214,14 @@ function collectCandidates(
   push(configured, 'config');
   push(process.execPath, 'current');
   for (const file of findOnPath()) push(file, 'path');
+  /*
+   * 自备运行时排在系统 PATH 之后、常见安装位置之前。
+   *
+   * 顺序的依据是"谁的优先级更高"：用户自己装好的 Node（PATH/常见位置）应当继续被沿用，
+   * 自备运行时是**系统真的没有 Node 时的兜底**；但相比"猜测出来的安装位置"（nvm 符号
+   * 链接、Volta 目录等），已经由启动器亲手铺设并验证过的自备运行时更确定。
+   */
+  if (root !== undefined) push(portableNodeExe(root), 'portable');
   for (const file of commonInstallPaths()) push(file, 'common');
   return out;
 }

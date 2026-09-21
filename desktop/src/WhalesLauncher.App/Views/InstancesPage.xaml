@@ -23,6 +23,10 @@
     xmlns:views="using:WhalesLauncher.Views"
     mc:Ignorable="d">
 
+    <!--
+        RootGrid 带 x:Name 是为了给卡片模板里的「导出实例包…」提供一个 ElementName 绑定源
+        （页面级的"实例包任务进行中"开关，见 InstancesPage.xaml.cs 的 PackMenuEnabled）。
+    -->
     <Grid x:Name="RootGrid" Padding="24">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -46,6 +50,16 @@
                         IsIndeterminate="True"
                         Visibility="Collapsed"
                         AutomationProperties.Name="正在刷新实例列表" />
+                    <Button
+                        x:Name="ImportPackButton"
+                        Click="OnImportPackClick"
+                        AutomationProperties.Name="导入实例包"
+                        ToolTipService.ToolTip="从 .whalepack.zip 实例包导入一个新实例（依赖会按包内清单重装）">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon Glyph="&#xE8B5;" FontSize="16" />
+                            <TextBlock Text="导入实例包" />
+                        </StackPanel>
+                    </Button>
                     <Button
                         x:Name="RefreshButton"
                         Click="OnRefreshClick"
@@ -368,19 +382,27 @@
                                         AutomationProperties.Name="查看实例详情"
                                         Click="OnDetailClick" />
 
-                                    <DropDownButton
+                                    <!--
+                                        为什么是「普通 Button + Button.Flyout」而不是 DropDownButton：
+                                        DropDownButton 是折叠菜单的常规形态，但它此前被记录为在自动化
+                                        调用（UIA InvokePattern）下会让进程以 COMException 0x8000FFFF
+                                        崩掉（crash.txt 可见），真实鼠标点击则正常 —— 即"两种输入走了两条
+                                        不同的激活路径"。普通 Button 的 InvokePattern 与鼠标点击都会走到
+                                        同一个 Click，展开交给框架，路径只有一条，也不再依赖 DropDownButton
+                                        的展开状态机。详情页插件行的「更多插件操作」一直是这个形态，
+                                        卡片菜单本次对齐到它（`p1-instances.ps1` 的 P1-06 用 Invoke 验证）。
+
+                                        为什么这里用 MenuFlyout 而不是 CommandBarFlyout：规范 §9.10.3 要求
+                                        「打开目录」是**子菜单**（五选）。MenuFlyoutSubItem 是官方支持的嵌套
+                                        结构，CommandBarFlyout 的次要命令区没有该形态。CommandBarFlyout 仍按
+                                        §9.10.3 的"右键菜单"一行挂在卡片 Border 上。
+                                        卡片内的命令一律用 Click + Tag 而不是 Command 绑定：DataTemplate 的
+                                        x:Bind 数据根是 CardView，取不到 Page 上的命令属性。
+                                    -->
+                                    <Button
                                         Grid.Column="4"
-                                        Content="更多"
                                         AutomationProperties.Name="更多操作">
-                                        <!--
-                                            为什么这里用 MenuFlyout 而不是 CommandBarFlyout：规范 §9.10.3 要求
-                                            「打开目录」是**子菜单**（五选）。MenuFlyoutSubItem 是官方支持的嵌套
-                                            结构，CommandBarFlyout 的次要命令区没有该形态。CommandBarFlyout 仍按
-                                            §9.10.3 的"右键菜单"一行挂在卡片 Border 上。
-                                            卡片内的命令一律用 Click + Tag 而不是 Command 绑定：DataTemplate 的
-                                            x:Bind 数据根是 CardView，取不到 Page 上的命令属性。
-                                        -->
-                                        <DropDownButton.Flyout>
+                                        <Button.Flyout>
                                             <MenuFlyout>
                                                 <MenuFlyoutItem
                                                     Text="启动 / 停止"
@@ -438,14 +460,25 @@
                                                     AutomationProperties.Name="刷新该实例状态" />
                                                 <MenuFlyoutSeparator />
                                                 <MenuFlyoutItem
+                                                    Text="导出实例包…"
+                                                    Tag="export"
+                                                    Click="OnCardMenuClick"
+                                                    IsEnabled="{Binding PackMenuEnabled, ElementName=RootGrid}"
+                                                    AutomationProperties.Name="导出实例包" />
+                                                <MenuFlyoutSeparator />
+                                                <MenuFlyoutItem
                                                     Text="删除实例…"
                                                     Tag="remove"
                                                     Click="OnCardMenuClick"
                                                     Foreground="{ThemeResource SystemFillColorCriticalBrush}"
                                                     AutomationProperties.Name="删除实例" />
                                             </MenuFlyout>
-                                        </DropDownButton.Flyout>
-                                    </DropDownButton>
+                                        </Button.Flyout>
+                                        <FontIcon
+                                            Glyph="&#xE712;"
+                                            FontSize="16"
+                                            AutomationProperties.AccessibilityView="Raw" />
+                                    </Button>
                                 </Grid>
                             </Grid>
                         </Border>

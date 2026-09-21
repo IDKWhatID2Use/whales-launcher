@@ -221,6 +221,47 @@
                     </StackPanel>
                 </Expander>
 
+                <!--
+                    环境自检（本轮新增）。
+
+                    两条规范约束决定了这个分区的形态：
+                      · §9.9「本页避免网络副作用」：页面加载**只显示上一次的结论**，不自动发起
+                        任何请求；要联网的动作（装引擎、探测 registry）只能由这里的按钮触发；
+                      · §11-U19「取消安装无后端通道」：因此取消按钮一个都不给，而是把
+                        "会联网、要多久、不能取消"写在选项说明里（不做一个按不动的取消键）。
+                -->
+                <Expander Header="环境自检" IsExpanded="True" HorizontalAlignment="Stretch">
+                    <StackPanel Spacing="8">
+                        <TextBlock
+                            Style="{StaticResource SettingsRowBodyStyle}"
+                            TextWrapping="Wrap"
+                            Text="检查启动器干活所需的环境与依赖：数据目录、全局配置、Node 运行时、npm、dsh 引擎、npm registry 连通性。缺失的本地项（目录等）会自动补齐；首次启动时已经自动跑过一次，这里可以随时手动重跑。" />
+
+                        <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                            <Button x:Name="PreflightButton" Content="运行环境自检" Click="OnRunPreflightClick" />
+                            <ProgressRing
+                                x:Name="PreflightRing"
+                                IsActive="False"
+                                Width="20"
+                                Height="20"
+                                Visibility="Collapsed" />
+                        </StackPanel>
+
+                        <CheckBox x:Name="PreflightAutoInstallCheck" Content="自动安装缺失的依赖" IsChecked="True" />
+                        <TextBlock
+                            Style="{StaticResource SettingsRowMetaTertiaryStyle}"
+                            TextWrapping="Wrap"
+                            Text="勾选后，若一个 dsh 引擎都没有，自检会用 npm 安装 registry 上的最新版：需要联网、下载数百 MB、视网速耗时数分钟，并且这一步无法中途取消（进度见右上角的运行日志）。取消勾选则只报告缺失，不下载任何东西。" />
+
+                        <InfoBar
+                            x:Name="PreflightStatusBar"
+                            IsOpen="False"
+                            IsClosable="True" />
+
+                        <controls:PreflightReportView x:Name="PreflightView" />
+                    </StackPanel>
+                </Expander>
+
                 <Expander Header="危险操作" IsExpanded="False" HorizontalAlignment="Stretch">
                     <StackPanel Spacing="8">
                         <ToggleSwitch

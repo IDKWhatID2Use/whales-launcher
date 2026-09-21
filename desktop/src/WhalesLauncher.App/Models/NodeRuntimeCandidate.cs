@@ -42,9 +42,17 @@ public static class NodeRuntimeSourceValues
     /// <summary>系统 PATH。</summary>
     public const string Path = "path";
 
+    /// <summary>
+    /// 启动器自备运行时：<c>&lt;启动器根&gt;/runtime/node/node.exe</c>。
+    ///
+    /// 由环境自检在"系统没有任何可用 Node"时下载铺设（见 <c>Services/NodeProvisioner.cs</c>），
+    /// 排在系统 PATH 之后、常见安装位置之前 —— 用户自己装的 Node 依然优先。
+    /// </summary>
+    public const string Portable = "portable";
+
     /// <summary>常见安装位置。</summary>
     public const string Common = "common";
 
     /// <summary>全部取值（优先级从高到低）。</summary>
-    public static readonly string[] All = { Env, Config, Current, Path, Common };
+    public static readonly string[] All = { Env, Config, Current, Path, Portable, Common };
 }

@@ -34,6 +34,15 @@ const INSTALL_TIMEOUT_MS = 30 * 60 * 1000;
 /** 查询可安装版本的超时。 */
 const VIEW_TIMEOUT_MS = 3 * 60 * 1000;
 
+/**
+ * npm registry 的默认地址（**唯一事实源**）。
+ *
+ * 全局配置缺失 / 不可解析时，环境自检（`preflight.ts`）与桥接层的配置自愈
+ * （`desktop/bridge/config-store.mjs` 的 `defaultConfig`）都必须得到同一个值，
+ * 否则"界面显示的 registry"与"自检实际用的 registry"会是两个地址。
+ */
+export const DEFAULT_ENGINE_REGISTRY = 'https://registry.npmjs.org';
+
 /* ------------------------------------------------------------------ *
  * 引擎体积（惰性 + mtime 缓存）
  *
@@ -152,6 +161,105 @@ export async function listAvailableEngines(registry: string, root?: string): Pro
   const parsed = parseVersionsJson(result.stdout);
   if (parsed === null) throw new Error(`npm 返回的版本列表无法解析：${tail(result.stdout)}`);
   return parsed.sort(compareVersions).reverse();
+}
+
+/**
+ * npm 查询类命令的收紧参数（环境自检用）。
+ *
+ * ### 为什么需要它（实测数据）
+ * npm 对不可达 registry 的默认行为是**重试 + 长超时**：`fetch-retries=2`、
+ * `fetch-timeout=300000`。本机实测（Windows / npm 11.16.0）：
+ *
+ * | registry 状态 | 默认参数下的失败耗时 |
+ * |---|---|
+ * | 连接被拒（ECONNREFUSED） | **70s** |
+ * | 返回 404 / 连接被对端重置 | **> 180s**（直到我们自己的进程超时才收场） |
+ *
+ * 首次启动自检如果在"网络不通"时让用户盯着进度条等三分钟，那"减少用户动手"就变成了
+ * "让用户干等"。因此自检在**探测联通性**与**查版本号**这两步上改用这一组参数：
+ * 单次请求 20s 封顶、不重试 —— 网络真的慢时由界面给出"稍后重试"的建议，
+ * 远好过把窗口挂住。
+ *
+ * 注意：**安装引擎不在此列**。真下载几百 MB 时重试是有价值的，那里沿用 npm 默认策略。
+ */
+export interface NpmQueryTuning {
+  /** 进程级超时（毫秒）。 */
+  timeoutMs?: number;
+  /** 传给 npm 的 `--fetch-timeout`（单次 HTTP 请求超时）。 */
+  fetchTimeoutMs?: number;
+  /** 传给 npm 的 `--fetch-retries`（重试次数）。 */
+  fetchRetries?: number;
+}
+
+/** 自检使用的收紧参数：单请求 20s、不重试、进程级 45s 兜底。 */
+export const QUICK_NPM_QUERY: Required<NpmQueryTuning> = {
+  timeoutMs: 45_000,
+  fetchTimeoutMs: 20_000,
+  fetchRetries: 0,
+};
+
+/**
+ * 把收紧参数翻译成 npm 命令行参数。
+ * @param tuning 收紧参数。
+ * @returns 命令行参数数组（无参数时为空数组）。
+ */
+export function npmTuningArgs(tuning: NpmQueryTuning): string[] {
+  const args: string[] = [];
+  if (tuning.fetchTimeoutMs !== undefined) {
+    args.push('--fetch-timeout', String(tuning.fetchTimeoutMs));
+  }
+  if (tuning.fetchRetries !== undefined) {
+    args.push('--fetch-retries', String(tuning.fetchRetries));
+  }
+  return args;
+}
+
+/**
+ * 查询 npm registry 上 `latest` dist-tag 指向的 dsh 版本。
+ *
+ * 与 {@link listAvailableEngines} 的差别（为什么两个都要）：
+ *  - `versions` 是**全部**版本，按 semver 排序后第一个可能是预发布版
+ *    （dsh 的发布节奏里 `-alpha.N` / `-beta.N` 很常见）；
+ *  - `latest` 是**发布方自己标注的默认版本**，这才是"自动装一个能用的"应当采用的值。
+ *
+ * 环境自检在"一个引擎都没有"时用它决定装哪个版本。
+ * @param registry npm registry。
+ * @param root 启动器根目录（可选，用于定位 npm cache 目录）。
+ * @param tuning 可选的收紧参数（自检传 {@link QUICK_NPM_QUERY}）。
+ * @returns 版本号。
+ * @throws npm 不可用 / 网络失败 / 返回格式异常。
+ */
+export async function latestEngineVersion(
+  registry: string,
+  root?: string,
+  tuning: NpmQueryTuning = {},
+): Promise<string> {
+  const cacheRoot = root ?? defaultRootForCache();
+  const result = await runCapture(
+    'npm',
+    [
+      'view',
+      '@deepseek-ai/dsh',
+      'version',
+      '--json',
+      '--registry',
+      registry,
+      ...npmTuningArgs(tuning),
+      ...npmCacheArgs(cacheRoot),
+    ],
+    {
+      timeoutMs: tuning.timeoutMs ?? VIEW_TIMEOUT_MS,
+      env: childBaseEnv(cacheRoot),
+      captureDir: corePaths(cacheRoot).cacheDir,
+    },
+  );
+  if (result.code !== 0) {
+    throw new Error(`查询最新版本失败（退出码 ${result.code}）：${tail(result.stderr || result.stdout)}`);
+  }
+  const parsed = parseVersionsJson(result.stdout);
+  const version = parsed === null ? undefined : parsed[0];
+  if (version === undefined) throw new Error(`npm 未返回 latest 版本：${tail(result.stdout)}`);
+  return version;
 }
 
 /**

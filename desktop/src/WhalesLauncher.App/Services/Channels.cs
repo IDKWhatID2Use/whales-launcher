@@ -6,8 +6,8 @@ namespace WhalesLauncher.Services;
 /// 协议 §3.1：方法名 = <c>CH</c> 常量的字面值（含冒号），一路到底，不做大小写或分隔符转换。
 /// 因此这里的常量既是"方法名"也是"通道名"，两件事不需要各自维护一份。
 ///
-/// 共 <see cref="Count"/> 条：<c>launcher</c> 3 + <c>instance</c> 8 + <c>engine</c> 4 + <c>plugin</c> 9
-/// + <c>settings</c> 4 + <c>saves</c> 2 + <c>pack</c> 3 + <c>log</c> 2 + <c>app</c> 4 = 39。
+/// 共 <see cref="Count"/> 条：<c>launcher</c> 4 + <c>instance</c> 8 + <c>engine</c> 4 + <c>plugin</c> 9
+/// + <c>settings</c> 4 + <c>saves</c> 2 + <c>pack</c> 3 + <c>log</c> 2 + <c>app</c> 4 = 40。
 /// <see cref="All"/> 供 <c>__handshake</c> 断言（协议 §5.3：不一致直接失败）。
 /// </summary>
 public static class Channels
@@ -19,6 +19,15 @@ public static class Channels
 
     /// <summary>探测运行 dsh 所需的 Node 运行时（<c>refresh=true</c> 时忽略缓存）。</summary>
     public const string LauncherDetectNode = "launcher:detectNode";
+
+    /// <summary>
+    /// 环境与依赖自检（**本轮新增**；旧 Electron 版没有这个能力）。
+    ///
+    /// 参数 <c>[options?: PreflightOptions]</c>，返回 <see cref="WhalesLauncher.Models.PreflightReport"/>。
+    /// <c>installEngine=true</c> 且本机无引擎时会联网安装 dsh（首次数分钟），
+    /// 因此调用方必须用 <see cref="PreflightService.PreflightTimeout"/> 之类的长超时。
+    /// </summary>
+    public const string LauncherPreflight = "launcher:preflight";
 
     /* ---------------- instance ---------------- */
 
@@ -91,12 +100,12 @@ public static class Channels
     public const string AppMenuCommand = "app:menuCommand";
 
     /// <summary>通道总数（握手断言用）。</summary>
-    public const int Count = 39;
+    public const int Count = 40;
 
     /// <summary>全部通道，顺序与契约 <c>CH</c> 的书写顺序一致。</summary>
     public static readonly string[] All =
     {
-        LauncherGetConfig, LauncherSetConfig, LauncherDetectNode,
+        LauncherGetConfig, LauncherSetConfig, LauncherDetectNode, LauncherPreflight,
         InstanceList, InstanceCreate, InstanceGet, InstanceUpdate, InstanceRemove,
         InstanceLaunch, InstanceStop, InstanceOpenFolder,
         EngineList, EngineAvailable, EngineInstall, EngineRemove,

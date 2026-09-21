@@ -8,6 +8,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import type { CorePaths, InstanceMeta, InstancePaths } from '../shared/contracts';
 import { validateName } from './names';
+import { extraCommandDirsSnapshot } from './proc';
 
 /**
  * 启动器根下的缓存目录名。
@@ -31,6 +32,15 @@ export const SHARED_DIR_NAME = 'shared';
 
 /** 启动器全局设置文件名。 */
 export const LAUNCHER_CONFIG_FILE = 'launcher.json';
+
+/**
+ * 启动器自备运行时目录（`runtime/`）。
+ *
+ * 首次启动自检在系统没有任何可用 Node.js 时会向这里**下载一份便携版 Node**
+ * （`<root>/runtime/node/node.exe`，见 `src/core/node-provision.ts`），
+ * 它是"零手动安装"的落点：解压即用、不需要管理员权限、不污染系统 `PATH`。
+ */
+export const RUNTIME_DIR_NAME = 'runtime';
 
 /** dsh 包在引擎目录里的相对位置。 */
 export const DSH_PACKAGE_RELATIVE = path.join('node_modules', '@deepseek-ai', 'dsh');
@@ -59,6 +69,27 @@ export function lastRoot(): string | null {
  */
 export function rememberRoot(root: string): void {
   rememberedRoot = root;
+}
+
+/**
+ * 启动器自备运行时目录：`<root>/runtime/node`。
+ * @param root 启动器根目录。
+ * @returns 目录绝对路径（不保证存在）。
+ */
+export function portableNodeDir(root: string): string {
+  return path.join(root, RUNTIME_DIR_NAME, 'node');
+}
+
+/**
+ * 启动器自备 Node 可执行文件：`<root>/runtime/node/node.exe`（非 Windows 上为 `node`）。
+ *
+ * 路径**必须**由本函数给出：C# 侧（`Services/NodeProvisioner.cs`）写、Node 侧
+ * （`node-runtime.ts` 的候选枚举）读，两边写死各自的一份就会漂移成"装好了却探测不到"。
+ * @param root 启动器根目录。
+ * @returns 可执行文件绝对路径（不保证存在）。
+ */
+export function portableNodeExe(root: string): string {
+  return path.join(portableNodeDir(root), process.platform === 'win32' ? 'node.exe' : 'node');
 }
 
 /**
@@ -184,8 +215,26 @@ export function childBaseEnv(root: string, extra: NodeJS.ProcessEnv = {}): NodeJ
     // 启动器（以及它拉起的一切）本来就没有交互终端，这里如实声明。
     CI: 'true',
     ELECTRON_SKIP_BINARY_DOWNLOAD: '1',
+    ...runtimePathEnv(),
     ...extra,
   };
+}
+
+/**
+ * 把自备运行时目录前置到子进程的 `PATH`。
+ *
+ * 覆盖的场景：启动器在首次自检里下载了便携版 Node（`<root>/runtime/node`），但系统
+ * `PATH` 上并没有 Node —— 此时 `dsh` 自己、以及它拉起的 `pnpm` / 插件安装脚本都必须
+ * 能找到同一份 `node`/`npm`，否则「引擎装上了却起不来」。目录来源是
+ * `node-runtime.ts` 探针判定成功的那一个（见 `proc.ts` 的 `setExtraCommandDirs`）。
+ * @returns 只含 `PATH` 的环境变量片段；无额外目录时为空对象（不覆盖原值）。
+ */
+export function runtimePathEnv(): NodeJS.ProcessEnv {
+  const dirs = extraCommandDirsSnapshot();
+  if (dirs.length === 0) return {};
+  const current = process.env['PATH'] ?? '';
+  const prefix = dirs.join(path.delimiter);
+  return { PATH: current.length > 0 ? `${prefix}${path.delimiter}${current}` : prefix };
 }
 
 /**

@@ -1,13 +1,13 @@
 # WinUI 3 渲染层 UI 自动化测试报告
 
-生成时间：2026-09-21T12:22:30.371Z　耗时：130.9s
+生成时间：2026-09-21T15:10:06.809Z　耗时：195.6s
 
 ## 1. 结论
 
 | 指标 | 数值 |
 |---|---|
-| 总断言数 | 69 |
-| 通过 | 68 |
+| 总断言数 | 73 |
+| 通过 | 72 |
 | 失败 | 0 |
 | 不可判定（unverifiable，**不计入通过**） | 1 |
 | 用例崩溃 | 0 |
@@ -61,15 +61,15 @@
 
 | 页面 | 到达方式 | 通过/总数 | 失败 | 不可判定 | 尝试次数 | 耗时 |
 |---|---|---|---|---|---|---|
-| 外壳（标题栏 / 左栏 / 应用菜单 / 日志抽屉 / 主题） |  | 9/9 | 0 | 0 | 1 | 9846ms |
-| P1 实例列表 |  | 10/10 | 0 | 0 | 1 | 17996ms |
-| P2 实例详情 · 插件 |  | 8/8 | 0 | 0 | 1 | 10409ms |
-| P3 实例详情 · 设置 |  | 7/7 | 0 | 0 | 1 | 5466ms |
-| P4 实例详情 · 存档 |  | 6/6 | 0 | 0 | 1 | 19413ms |
-| P5 实例详情 · 日志 |  | 6/6 | 0 | 0 | 1 | 14766ms |
-| P6 引擎版本管理 |  | 6/7 | 0 | 1 | 1 | 30208ms |
-| P7 创建实例向导 |  | 8/8 | 0 | 0 | 1 | 13029ms |
-| P8 全局设置 |  | 8/8 | 0 | 0 | 1 | 9709ms |
+| 外壳（标题栏 / 左栏 / 应用菜单 / 日志抽屉 / 主题） |  | 11/11 | 0 | 0 | 1 | 24105ms |
+| P1 实例列表 |  | 12/12 | 0 | 0 | 1 | 27551ms |
+| P2 实例详情 · 插件 |  | 8/8 | 0 | 0 | 1 | 13198ms |
+| P3 实例详情 · 设置 |  | 7/7 | 0 | 0 | 1 | 6101ms |
+| P4 实例详情 · 存档 |  | 6/6 | 0 | 0 | 1 | 19754ms |
+| P5 实例详情 · 日志 |  | 6/6 | 0 | 0 | 1 | 15070ms |
+| P6 引擎版本管理 |  | 6/7 | 0 | 1 | 2 | 30129ms |
+| P7 创建实例向导 |  | 8/8 | 0 | 0 | 1 | 17560ms |
+| P8 全局设置 |  | 8/8 | 0 | 0 | 1 | 12208ms |
 
 ### 外壳（标题栏 / 左栏 / 应用菜单 / 日志抽屉 / 主题）
 
@@ -86,11 +86,14 @@
 | undefined undefined | undefined | unverifiable |  |
 | undefined undefined | undefined | unverifiable |  |
 | undefined undefined | undefined | unverifiable |  |
+| undefined undefined | undefined | unverifiable |  |
+| undefined undefined | undefined | unverifiable |  |
 
 <details><summary>UIA 诊断</summary>
 
 ```
-pid=25720 hwnd=8064498 class=WinUIDesktopWin32WindowClass route=instances
+pid=52472 hwnd=18091968 class=WinUIDesktopWin32WindowClass route=instances
+smokeRoute='instances' ctxRoute='instances' otherWhalesProcs=0
 ```
 
 </details>
@@ -111,11 +114,13 @@ pid=25720 hwnd=8064498 class=WinUIDesktopWin32WindowClass route=instances
 | undefined undefined | undefined | unverifiable |  |
 | undefined undefined | undefined | unverifiable |  |
 | undefined undefined | undefined | unverifiable |  |
+| undefined undefined | undefined | unverifiable |  |
+| undefined undefined | undefined | unverifiable |  |
 
 <details><summary>UIA 诊断</summary>
 
 ```
-pid=21436 hwnd=10292698 route=instances
+pid=33612 hwnd=13896970 route=instances
 ```
 
 </details>
@@ -138,7 +143,7 @@ pid=21436 hwnd=10292698 route=instances
 <details><summary>UIA 诊断</summary>
 
 ```
-pid=36196 hwnd=11930970 route=detail/first/plugins
+pid=47492 hwnd=11143932 route=detail/first/plugins
 ```
 
 </details>
@@ -160,7 +165,7 @@ pid=36196 hwnd=11930970 route=detail/first/plugins
 <details><summary>UIA 诊断</summary>
 
 ```
-pid=40480 hwnd=16255966 route=detail/first/settings
+pid=36948 hwnd=6033234 route=detail/first/settings
 ```
 
 </details>
@@ -181,7 +186,7 @@ pid=40480 hwnd=16255966 route=detail/first/settings
 <details><summary>UIA 诊断</summary>
 
 ```
-pid=39532 hwnd=14945524 route=detail/first/saves
+pid=18112 hwnd=11537148 route=detail/first/saves
 ```
 
 </details>
@@ -202,7 +207,7 @@ pid=39532 hwnd=14945524 route=detail/first/saves
 <details><summary>UIA 诊断</summary>
 
 ```
-pid=47412 hwnd=12193114 route=detail/first/logs
+pid=38844 hwnd=16386768 route=detail/first/logs
 ```
 
 </details>
@@ -224,7 +229,7 @@ pid=47412 hwnd=12193114 route=detail/first/logs
 <details><summary>UIA 诊断</summary>
 
 ```
-pid=36360 hwnd=11209556 route=engines
+pid=47688 hwnd=4721948 route=engines
 ```
 
 </details>
@@ -247,7 +252,7 @@ pid=36360 hwnd=11209556 route=engines
 <details><summary>UIA 诊断</summary>
 
 ```
-pid=48796 hwnd=11275092 launchRoute=create
+pid=54052 hwnd=3673902 launchRoute=create
 create wizard reached via deep link
 ```
 
@@ -271,7 +276,7 @@ create wizard reached via deep link
 <details><summary>UIA 诊断</summary>
 
 ```
-pid=44320 hwnd=16583646 launchRoute=settings
+pid=52424 hwnd=11931490 launchRoute=settings
 global settings reached via deep link
 ```
 
@@ -306,12 +311,13 @@ global settings reached via deep link
 ### DEFECT-3　列表卡片 / 左栏项的 UIA `Name` 是 CLR 类型名而不是显示文字
 
 - 严重度：低（可访问性问题，且让元素定位变脆）
-- 状态：未修（登记给渲染层负责人）
+- 状态：**左栏那一半已随左栏改造消失**；实例卡片那一半仍未修
 - 证据：
-  - 实例卡片容器：`ControlType.ListItem` + `name='WhalesLauncher.Views.InstanceCard'`；左栏行：`name='WhalesLauncher.Shell.RailEntry'`。
-  - 可见文字（实例名、状态、路径）都在子 TextBlock 上。屏幕阅读器读到的是类型名，不是"UI Alpha，已停止"。
-  - 建议：给 `GridViewItem` / `NavigationViewItem` 设 `AutomationProperties.Name="{x:Bind DisplayName}"`（或在 `InstanceCard` / `RailEntry` 上实现 `ToString()`）。
-- 对本套用例的影响：用例因此改用「读子节点文本」定位卡片与左栏行，而不是按 Name 匹配；这也是为什么左栏实例数断言写成"名字出现在左栏文本集合里"。
+  - 实例卡片容器：`ControlType.ListItem` + `name='WhalesLauncher.Views.InstanceCard'`；~~左栏行：`name='WhalesLauncher.Shell.RailEntry'`~~（该数据类型已随左栏改造删除）。
+  - 左栏那一半是**自动**消解的：左栏改为静态 `NavigationViewItem` 后每项都显式写了 `AutomationProperties.Name`（实例 / 引擎版本管理 / 全局设置 / 关于 WhalesLauncher），UIA 名字就是可见文字 —— 不再有"类型名当名字"的可能。
+  - 实例卡片那一半仍然成立：可见文字（实例名、状态、路径）都在子 TextBlock 上，屏幕阅读器读到的是类型名，不是"UI Alpha，已停止"。
+  - 建议：给 `GridViewItem` 设 `AutomationProperties.Name="{x:Bind DisplayName}"`（或在 `InstanceCard` 上实现 `ToString()`）。
+- 对本套用例的影响：左栏断言现在**按 `AutomationProperties.Name` 精确定位**（SH-02 对四项逐一精确匹配），不再依赖"文本出现在子树里"；实例卡片相关断言仍必须读子节点文本，这也是 P1 用例偏长的原因。
 
 ### DEFECT-4　YAML 编辑器行号列 UIA 值只有 "1"
 
@@ -334,9 +340,13 @@ global settings reached via deep link
 4. 不依赖进程存活来判定业务结论的地方就不判定（例如 P7-02「空名不创建实例」只看临时 home 的目录数，进程是否被杀不影响结论）。
 建议：在这台机器上跑 UI 测试前，先确认没有其它代理/脚本在反复启停 WhalesLauncher。
 
+本次运行发生的重试：
+
+- P6 引擎版本管理：尝试 2 次（前 1 次为基础设施失败）
+
 ## 9. 建议后续
 
-1. **给 `InstanceCard` / `RailEntry` 补 `AutomationProperties.Name`**（DEFECT-3）：既修可访问性，也让元素定位从"读子节点"回到"按名字找"，用例会更稳更短。
+1. **给 `InstanceCard` 补 `AutomationProperties.Name`**（DEFECT-3 的剩余部分；左栏那一半已随左栏改造消失）：既修可访问性，也让元素定位从"读子节点"回到"按名字找"，P1 用例会更稳更短。
 2. **专项确认行号列**（DEFECT-4）：加一个"编辑内容 → 等 500ms → 读 `Gutter`"的用例，把"采样时机"与"同步缺陷"区分开。
 3. **补 `ContentDialog` 覆盖**：本套用例刻意回避了会弹确认框的破坏性操作（删除实例等）。要覆盖需要一套"点了取消/确认再恢复现场"的用例。
 4. **像素级断言按需接入**：驱动已经提供 `Save-Shot` / `Get-ImageStats` / `Compare-Image`（复用 `[WinAuditCore]` 的 PrintWindow 链路），当前用例未使用，因为像素断言在主题/字体/DPI 变化下噪音大。真正需要"变了没有"的场合（如主题切换、抽屉动效）再补。
@@ -352,7 +362,7 @@ global settings reached via deep link
     "bridge": "F:\\WhalesLauncher\\dist\\bridge\\server.cjs",
     "node": "v26.3.0",
     "platform": "win32 10.0.26200",
-    "tmpHome": "F:\\Temp\\whales-ui-test-ht6XaR"
+    "tmpHome": "F:\\Temp\\whales-ui-test-KMNxyw"
   },
   "expectations": {
     "instanceCount": 3,
@@ -371,8 +381,8 @@ global settings reached via deep link
       "0.0.1-uitest.1",
       "0.0.1-uitest"
     ],
-    "noEngineHomeDir": "F:\\Temp\\whales-ui-test-UmVS6k",
-    "emptyHomeDir": "F:\\Temp\\whales-ui-test-UaHPG2",
+    "noEngineHomeDir": "F:\\Temp\\whales-ui-test-9mvaDx",
+    "emptyHomeDir": "F:\\Temp\\whales-ui-test-EfZ7z5",
     "firstInstanceName": "UI Alpha",
     "firstInstanceDir": "ui-alpha",
     "firstInstanceId": "ui-fixture-0001",

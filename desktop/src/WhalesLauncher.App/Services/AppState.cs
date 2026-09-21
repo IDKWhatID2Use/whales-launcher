@@ -13,6 +13,11 @@ public sealed class AppState
 {
     private readonly CoreBridge _bridge;
 
+    /// <summary>
+    /// 把桥接推送汇入 UI 线程的调度器；未挂载时退化为"直接在调用线程上应用"（见 <see cref="AttachRuntimePushes"/>）。
+    /// </summary>
+    private Microsoft.UI.Dispatching.DispatcherQueue? _dispatcher;
+
     public AppState(CoreBridge bridge)
     {
         _bridge = bridge;
@@ -134,6 +139,89 @@ public sealed class AppState
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// 接住后端推来的 <c>log:state</c>（协议 §2.4）：实例运行时状态一变，界面**不用等轮询**。
+    ///
+    /// 为什么必须有这条：<c>instance:list</c> 是运行态的唯一事实源，但它只在被请求时才给出答案。
+    /// 进程崩掉（或被杀）之后没有任何人再去问，卡片就会一直停在「运行中」，直到用户手动点「刷新」。
+    /// Node 侧其实一直在推 —— core 的退出链会推最后一帧 <c>crashed</c> 快照，桥接层也把
+    /// <c>log:state</c> 分派成了 <see cref="CoreBridge.LogStateChanged"/> 事件 —— 缺的只是这里的订阅。
+    ///
+    /// 线程模型：事件在桥接读线程上触发，而订阅方（外壳左栏、实例列表、详情页）都要碰 XAML，
+    /// 因此统一经调度器切到 UI 线程后再改集合、再发通知（约定 §8），
+    /// 避免"后台线程改 ObservableCollection"这类只在偶发时序下爆炸的问题。
+    /// </summary>
+    /// <param name="dispatcher">主窗口的 UI 调度器；为 null 时退化为同步应用（测试/无窗口场景）。</param>
+    public void AttachRuntimePushes(Microsoft.UI.Dispatching.DispatcherQueue? dispatcher)
+    {
+        _dispatcher = dispatcher;
+        _bridge.LogStateChanged += OnRuntimePushed;
+    }
+
+    /// <summary>解绑推送（窗口关闭时调用，避免桥接进程在读线程上回调到已释放的对象）。</summary>
+    public void DetachRuntimePushes() => _bridge.LogStateChanged -= OnRuntimePushed;
+
+    private void OnRuntimePushed(object? sender, InstanceRuntime runtime)
+    {
+        var dispatcher = _dispatcher;
+
+        if (dispatcher is null)
+        {
+            ApplyRuntime(runtime);
+            return;
+        }
+
+        // 队列已满/调度器已关闭时**必须**有个兜底：漏掉这一帧就等于回到"要手动刷新"的老问题。
+        if (!dispatcher.TryEnqueue(() => ApplyRuntime(runtime)))
+        {
+            ApplyRuntime(runtime);
+        }
+    }
+
+    /// <summary>
+    /// 用推送来的快照就地更新对应实例的运行时状态。
+    ///
+    /// 只改**一个字段**（<c>Runtime</c>），不动集合：集合成员没变，卡片容器、滚动位置与
+    /// 当前悬停状态都不会被重建，只是 <c>x:Bind</c> 重新取值 —— 与定时器刷新"最近启动"
+    /// 文案用的是同一条思路。
+    /// </summary>
+    private void ApplyRuntime(InstanceRuntime runtime)
+    {
+        if (string.IsNullOrEmpty(runtime.InstanceId)) return;
+
+        foreach (var item in Instances)
+        {
+            if (!string.Equals(item.Meta?.Id, runtime.InstanceId, StringComparison.Ordinal)) continue;
+
+            // 状态与关键字段都没变就不发通知：桥接在启动过程中会推多帧
+            // （starting → running → 端口/URL 回填），其中重复帧不该引起任何重绘。
+            if (!RuntimeChanged(item.Runtime, runtime)) return;
+
+            item.Runtime = runtime;
+            InstancesChanged?.Invoke(this, EventArgs.Empty);
+            return;
+        }
+    }
+
+    /// <summary>
+    /// 两份运行态快照是否有界面可见的差异。
+    ///
+    /// 比较范围就是卡片上会显示的东西（状态点/状态文字/端口/地址/主按钮可用性），
+    /// 外加 <c>lastError</c>（崩溃原因）。刻意**不**比较 <c>startedAt</c>：它只在启动那一帧写一次，
+    /// 而推进它的那几帧必然已经由 <c>state</c> 或 <c>pid</c> 的变化带到。
+    /// </summary>
+    private static bool RuntimeChanged(InstanceRuntime? current, InstanceRuntime next)
+    {
+        if (current is null) return true;
+
+        return !string.Equals(current.State, next.State, StringComparison.Ordinal)
+            || current.Pid != next.Pid
+            || current.Port != next.Port
+            || !string.Equals(current.Url, next.Url, StringComparison.Ordinal)
+            || current.ExitCode != next.ExitCode
+            || !string.Equals(current.LastError, next.LastError, StringComparison.Ordinal);
     }
 
     /// <summary>按稳定 id 查实例；不存在返回 null。</summary>

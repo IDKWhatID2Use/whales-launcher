@@ -12,6 +12,8 @@ export const LABELS = Object.freeze({
   shell: {
     windowTitle: 'WhalesLauncher',
     subtitleInstances: '实例',
+    /** 「关于」页的标题栏副标题（SubtitleFor 里的 RouteKeys.About）。 */
+    subtitleAbout: '关于',
     appMenuFile: '文件',
     appMenuEdit: '编辑',
     appMenuHelp: '帮助',
@@ -24,10 +26,21 @@ export const LABELS = Object.freeze({
     logFollowName: '跟随最新日志',
     logCountAid: 'LogCountText',
     logSourceName: '日志来源',
-    railItemTypeName: 'WhalesLauncher.Shell.RailEntry',
-    railNewInstance: '新建实例',
+    /**
+     * 左栏功能项（静态 NavigationViewItem，每项都设了 AutomationProperties.Name）。
+     * 用例按**精确的 UIA 名字**定位它们，而不是"文本出现在子树里" ——
+     * 后者在左栏改版后会误判（例如实例名里恰好含"实例"）。
+     */
+    railInstances: '实例',
     railEngines: '引擎版本管理',
     railSettings: '全局设置',
+    /**
+     * 关于项的 UIA 名是 "关于 WhalesLauncher"（不是可见文字"关于"）——
+     * XAML 里刻意给屏幕阅读器一个自解释的名字。按名字精确匹配时要用这个值。
+     */
+    railAbout: '关于 WhalesLauncher',
+    /** 全部左栏项（顺序即界面顺序）；「关于」在 FooterMenuItems，其余在 MenuItems。 */
+    railEntries: ['实例', '引擎版本管理', '全局设置', '关于 WhalesLauncher'],
     cardItemTypeName: 'WhalesLauncher.Views.InstanceCard',
     /** 菜单展开后必然出现的应用菜单项（来自 app:menu），用于判断菜单真的打开了。 */
     appMenuExpected: ['打开启动器目录', '打开实例目录', '打开引擎目录'],
@@ -38,6 +51,8 @@ export const LABELS = Object.freeze({
     searchName: '搜索实例',
     refreshName: '刷新实例列表',
     createName: '新建实例',
+    /** 页头的实例包导入入口（旧 Electron 版也有，重构后一度缺失）。 */
+    importPackName: '导入实例包',
     /** x:Name of the card GridView -> exposed as AutomationId. */
     gridAid: 'InstanceGrid',
     /** AutomationProperties.Name of the same GridView. */
@@ -58,7 +73,7 @@ export const LABELS = Object.freeze({
     /** Anchor button of the "filtered to nothing" empty state. */
     emptyNoMatchButton: '清除筛选条件',
     emptyNoMatchHintPrefix: '没有实例匹配',
-    moreMenuExpected: ['启动或停止实例', '在浏览器中打开界面', '打开实例文件夹', '查看实例详情', '编辑实例设置', '刷新该实例状态', '删除实例'],
+    moreMenuExpected: ['启动或停止实例', '在浏览器中打开界面', '打开实例文件夹', '查看实例详情', '编辑实例设置', '刷新该实例状态', '导出实例包', '删除实例'],
   },
 
   /* ---------------- P2–P5 详情页公共 ---------------- */
@@ -187,15 +202,17 @@ export const LABELS = Object.freeze({
  */
 export const CHECKS = Object.freeze({
   shell: {
-    'SH-01': '左栏实例项数量与后端实例数一致',
-    'SH-02': '左栏固定入口（新建实例 / 引擎版本管理 / 全局设置）齐全',
+    'SH-01': '左栏不再重复显示实例列表（功能去重的回归保护）',
+    'SH-02': '左栏功能项齐全（实例 / 引擎版本管理 / 全局设置 / 关于）',
     'SH-03': '应用菜单可展开并列出菜单项',
     'SH-04': '应用菜单可用 Escape 关闭',
     'SH-05': '日志抽屉可打开',
     'SH-06': '日志抽屉可再次关闭',
     'SH-07': '主题按钮可点击且标签在深色/浅色间变化',
     'SH-08': '标题栏副标题反映当前路由',
-    'SH-09': '左栏实例筛选框可读写',
+    'SH-09': '左栏筛选框已移除（实例搜索只在实例页内）',
+    'SH-10': '左栏可在功能页与实例页之间互跳（旧左栏没有实例入口的回归保护）',
+    'SH-11': '左栏底部「关于」是可导航页面（不是弹框），且能回到实例页',
   },
   'p1-instances': {
     'P1-01': '卡片数量 == 后端实例数',
@@ -208,6 +225,8 @@ export const CHECKS = Object.freeze({
     'P1-08': '状态筛选 4 项存在且默认选中"全部"',
     'P1-09': '排序下拉存在',
     'P1-10': '点击刷新后卡片数量不变',
+    'P1-11': '页头有「导入实例包」入口且可用（实例包导入的界面入口）',
+    'P1-12': '「更多」菜单里的导出项可用（实例包导出的界面入口）',
   },
   'p2-detail-plugins': {
     'P2-01': '深链进入时选中的是"插件"页签',

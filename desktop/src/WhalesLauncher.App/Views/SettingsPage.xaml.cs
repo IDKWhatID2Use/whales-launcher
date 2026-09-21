@@ -81,6 +81,12 @@ public sealed partial class SettingsPage : Page
             VersionText.Visibility = version.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
 
             await DetectNodeAsync(refresh: false);
+
+            /*
+             * 环境自检分区只展示**已有**的结论，不在页面加载时发起任何请求（规范 §9.9）。
+             * 首次启动时外壳已经跑过一次，报告缓存在 PreflightService.LastReport 里。
+             */
+            PreflightView.Render(PreflightService.LastReport);
         }
         catch (Exception ex)
         {
@@ -560,9 +566,94 @@ public sealed partial class SettingsPage : Page
         NodeRuntimeSourceValues.Config => "全局设置 nodePath",
         NodeRuntimeSourceValues.Current => "启动器自身进程",
         NodeRuntimeSourceValues.Path => "系统 PATH",
+        NodeRuntimeSourceValues.Portable => "启动器自备运行时",
         NodeRuntimeSourceValues.Common => "常见安装位置",
         _ => string.IsNullOrEmpty(source) ? "—" : source,
     };
+
+    // ==================================================================
+    // 环境自检
+    // ==================================================================
+
+    /// <summary>自检是否正在跑（连点保护）。</summary>
+    private bool _preflightRunning;
+
+    private void OnRunPreflightClick(object sender, RoutedEventArgs e) => _ = RunPreflightAsync();
+
+    /// <summary>
+    /// 手动运行一次环境自检。
+    ///
+    /// 这是本页**唯一**会联网的入口（规范 §9.9：探测器/下载一律由显式按钮触发）：
+    /// 勾选「自动安装缺失的依赖」时，缺引擎会走 npm 安装（数分钟、不可取消）；
+    /// 不勾选则只做检查与本地修复。
+    /// </summary>
+    private async Task RunPreflightAsync()
+    {
+        if (_preflightRunning)
+        {
+            return;
+        }
+
+        var installEngine = PreflightAutoInstallCheck.IsChecked == true;
+        _preflightRunning = true;
+        SetPreflightBusy(true);
+        PreflightStatusBar.IsOpen = false;
+
+        try
+        {
+            var result = await PreflightService.RunAsync(new PreflightOptions
+            {
+                AutoFix = true,
+                InstallEngine = installEngine,
+                CheckNetwork = true,
+            });
+
+            if (!result.Ok || result.Value is null)
+            {
+                var reason = result.Error ?? "后端未返回原因。";
+                PreflightView.Render(PreflightService.LastReport, reason);
+                ShowStatus(InfoBarSeverity.Error, "环境自检未能完成", reason);
+                return;
+            }
+
+            var report = result.Value;
+            PreflightView.Render(report);
+
+            if (report.ProblemCount > 0)
+            {
+                ShowStatus(InfoBarSeverity.Warning, $"自检完成：{report.ProblemCount} 项待处理", report.Message);
+            }
+            else
+            {
+                ShowStatus(InfoBarSeverity.Success, "自检完成", report.Message);
+            }
+        }
+        catch (Exception ex)
+        {
+            PreflightView.Render(null, ex.Message);
+            ShowStatus(InfoBarSeverity.Error, "环境自检未能完成", ex.Message);
+        }
+        finally
+        {
+            _preflightRunning = false;
+            SetPreflightBusy(false);
+        }
+    }
+
+    /// <summary>
+    /// 运行中的界面状态。
+    ///
+    /// 不弹全屏遮罩：慢的是**这一项**（可能在下载引擎），其余设置项照常可用（规范 §6.6/§9.7
+    /// 「慢调用只让相关分区显示进度，不阻塞其余内容」）。按钮内联 20×20 的 ProgressRing
+    /// 表达"正在进行"，并禁用按钮本身避免并发发起第二次安装。
+    /// </summary>
+    private void SetPreflightBusy(bool busy)
+    {
+        PreflightButton.IsEnabled = !busy;
+        PreflightAutoInstallCheck.IsEnabled = !busy;
+        PreflightRing.IsActive = busy;
+        PreflightRing.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
+    }
 
     // ==================================================================
     // 小工具

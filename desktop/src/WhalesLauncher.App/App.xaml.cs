@@ -1,5 +1,7 @@
+using System.Diagnostics;
 using Microsoft.UI.Xaml;
 using WhalesLauncher.Services;
+using WhalesLauncher.Shell;
 
 namespace WhalesLauncher;
 
@@ -80,9 +82,32 @@ public partial class App : Application
             var state = new AppState(bridge);
             AppServices.Initialize(bridge, state);
 
+            // 让界面**被后端推送驱动**，而不是只靠实例列表的周期轮询：
+            // 进程崩溃/被杀的最后一帧 log:state 一到，卡片状态就更新（详见 AppState.AttachRuntimePushes）。
+            // 用主窗口的调度器把推送汇入 UI 线程；窗口此时一定已经创建（OnLaunched 先建窗口后装后端）。
+            state.AttachRuntimePushes(MainWindow?.DispatcherQueue);
+
             bridge.BackendExited += OnBackendExited;
 
-            await bridge.StartAsync();
+            try
+            {
+                await bridge.StartAsync();
+            }
+            catch (InvalidOperationException ex) when (IsMissingRuntime(ex))
+            {
+                /*
+                 * 侧车进程本身要靠 Node 才能跑起来（鸡生蛋），所以"这台机器没有 Node"
+                 * 只能在这里、由宿主自己解决：问一次 → 下载官方便携版 → 重试一次启动。
+                 * 用户拒绝或下载失败时把原异常抛回外层，由统一的后端失败路径处理。
+                 */
+                if (!await TryProvisionNodeAsync(home))
+                {
+                    throw;
+                }
+
+                await bridge.StartAsync();
+            }
+
             await state.InitializeAsync();
         }
         catch (Exception ex)
@@ -97,6 +122,40 @@ public partial class App : Application
             AppServices.Toast.Error(
                 "后端未能启动",
                 $"{reason}\n\n界面仍可浏览，但实例与引擎操作不可用。");
+        }
+    }
+
+    /// <summary>
+    /// 该异常是否是「找不到 Node 运行时」。
+    ///
+    /// 判据是 <see cref="NodeRuntimeLocator.RequireAsync"/> 的失败文案（它在无法给出可用
+    /// 运行时时抛 <see cref="InvalidOperationException"/>，消息以这句话开头）。刻意不用
+    /// "任何 InvalidOperationException" 兜底：那会把握手失败、桥接缺失之类的真问题
+    /// 也当成"缺 Node"而去下载 30MB。
+    /// </summary>
+    private static bool IsMissingRuntime(Exception ex)
+        => ex is InvalidOperationException
+           && ex.Message.Contains("未找到可用的 Node.js 运行时", StringComparison.Ordinal);
+
+    /// <summary>
+    /// 备好一个可用的 Node（探测 → 没有就问用户 → 下载便携版）。
+    /// @param home 启动器根目录。
+    /// @returns 是否已获得可用运行时。
+    /// </summary>
+    private static async Task<bool> TryProvisionNodeAsync(string home)
+    {
+        try
+        {
+            var report = await PreflightService.DetectRuntimeAsync(home);
+            // 探测到了就不必下载（例如环境变量/常见位置刚刚才可用）：让调用方直接重试启动
+            if (report.Ok) return true;
+
+            return await PreflightPresenter.EnsurePortableNodeAsync(home, report.Message);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[Preflight] 自动获取 Node 运行时失败：{ex}");
+            return false;
         }
     }
 
@@ -120,6 +179,12 @@ public partial class App : Application
         if (_bridge is null)
         {
             return;
+        }
+
+        // 先解绑推送：桥接进程会在自己的读线程上回调，窗口都关了还往里推没有意义。
+        if (AppServices.IsReady)
+        {
+            AppServices.State.DetachRuntimePushes();
         }
 
         try
