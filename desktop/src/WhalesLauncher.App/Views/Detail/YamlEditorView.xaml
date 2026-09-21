@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    YAML 纯文本编辑器（视觉规范 §6.5 的「YAML 编辑降级方案」）。
+
+    ⚠️ 这是**降级实现**：规范首选 WebView2 + Monaco（§6.5、§11 U04），本控件是其替代路径 ——
+    「TextBox（AcceptsReturn=True、TextWrapping=NoWrap、等宽字族）+ 只读行号列」。
+    降级态下**不做**语法着色（规范明确禁止伪装）。
+
+    已知限制：行号列与编辑区各自滚动，不联动。原因见 YamlEditorView.xaml.cs 顶部注释。
+-->
+<UserControl
+    x:Class="WhalesLauncher.Views.Detail.YamlEditorView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Grid RowSpacing="8">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBlock
+            x:Name="LintText"
+            Grid.Row="0"
+            Style="{StaticResource CaptionTextBlockStyle}"
+            Foreground="{ThemeResource SystemFillColorCautionBrush}"
+            TextWrapping="Wrap"
+            Visibility="Collapsed" />
+
+        <Grid
+            x:Name="EditorGrid"
+            Grid.Row="1"
+            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+            BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+            BorderThickness="1"
+            CornerRadius="{ThemeResource ControlCornerRadius}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <!--
+                行号列：用**只读 TextBox** 而不是 TextBlock，因为 TextBlock 没有滚动条，
+                超过可视高度后行号会被裁掉、与正文错位。只读 TextBox 自带滚动条，
+                行高与正文字体一致时能对上（字体/字号/Padding 刻意与右侧保持相同值）。
+            -->
+            <TextBox
+                x:Name="Gutter"
+                Grid.Column="0"
+                MinWidth="56"
+                AcceptsReturn="True"
+                AutomationProperties.AccessibilityView="Raw"
+                Background="Transparent"
+                BorderThickness="0"
+                FontFamily="Cascadia Mono, Consolas, monospace"
+                FontSize="14"
+                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                IsReadOnly="True"
+                IsSpellCheckEnabled="False"
+                IsTabStop="False"
+                Padding="8,8,4,8"
+                TextAlignment="Right"
+                TextWrapping="NoWrap" />
+
+            <TextBox
+                x:Name="Editor"
+                Grid.Column="1"
+                AcceptsReturn="True"
+                AutomationProperties.Name="settings.yaml 内容"
+                Background="Transparent"
+                BorderThickness="0"
+                FontFamily="Cascadia Mono, Consolas, monospace"
+                FontSize="14"
+                IsSpellCheckEnabled="False"
+                Padding="8,8,8,8"
+                TextChanged="OnEditorTextChanged"
+                TextWrapping="NoWrap">
+                <TextBox.KeyboardAccelerators>
+                    <!-- 代码编辑里 Tab 应插入缩进而不是移走焦点 -->
+                    <KeyboardAccelerator
+                        Key="Tab"
+                        Invoked="OnTabInvoked" />
+                    <!-- 规范 §9.4 明确要求 Ctrl+S 保存；焦点在编辑器内时由这里触发 -->
+                    <KeyboardAccelerator
+                        Key="S"
+                        Modifiers="Control"
+                        Invoked="OnSaveAccelerator" />
+                </TextBox.KeyboardAccelerators>
+            </TextBox>
+        </Grid>
+
+        <TextBlock
+            Grid.Row="2"
+            Style="{StaticResource CaptionTextBlockStyle}"
+            Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+            Text="纯文本模式（降级路径）：无语法着色，行号列与编辑区各自滚动"
+            TextWrapping="Wrap" />
+    </Grid>
+</UserControl>

@@ -1,0 +1,373 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    P3 实例详情 · 设置（视觉规范 §9.4）。
+
+    结构：页头（脏标记 + 重新载入 / 保存）→ 共享冲突 InfoBar → Grid[*, 360]（左编辑器 / 右设置面板）。
+
+    ⚠️ 编辑器是**降级实现**（规范 §6.5 的 YAML 编辑降级方案：TextBox + 只读行号列），
+    WebView2 + Monaco 未落实，已在交付回复中如实登记。
+-->
+<UserControl
+    x:Class="WhalesLauncher.Views.Detail.InstanceSettingsView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:muxc="using:Microsoft.UI.Xaml.Controls"
+    xmlns:detail="using:WhalesLauncher.Views.Detail">
+
+    <Grid RowSpacing="8">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <muxc:BreadcrumbBar x:Name="Crumb" Grid.Row="0" />
+
+        <Grid Grid.Row="1" ColumnSpacing="16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <StackPanel
+                Grid.Column="0"
+                Orientation="Horizontal"
+                Spacing="12"
+                VerticalAlignment="Center">
+                <TextBlock
+                    Style="{StaticResource SubtitleTextBlockStyle}"
+                    Text="设置" />
+                <TextBlock
+                    x:Name="DirtyText"
+                    VerticalAlignment="Center"
+                    Style="{StaticResource CaptionTextBlockStyle}"
+                    Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                    Text="有未保存的更改"
+                    Visibility="Collapsed" />
+            </StackPanel>
+
+            <StackPanel
+                Grid.Column="1"
+                Orientation="Horizontal"
+                Spacing="8">
+                <Button
+                    x:Name="ReloadButton"
+                    AutomationProperties.Name="放弃更改并重新载入"
+                    Click="OnReloadClick"
+                    Content="重新载入" />
+                <Button
+                    x:Name="SaveButton"
+                    AutomationProperties.Name="保存 settings.yaml"
+                    Click="OnSaveClick"
+                    Content="保存"
+                    Style="{StaticResource AccentButtonStyle}" />
+            </StackPanel>
+        </Grid>
+
+        <!-- 共享冲突：必须显式解决，禁止默认替用户选一侧（规范 §9.4） -->
+        <muxc:InfoBar
+            x:Name="ConflictBar"
+            Grid.Row="2"
+            Severity="Warning"
+            IsClosable="False"
+            IsOpen="False">
+            <muxc:InfoBar.ActionButton>
+                <Button
+                    AutomationProperties.Name="解决共享冲突"
+                    Click="OnResolveConflictClick"
+                    Content="解决冲突…" />
+            </muxc:InfoBar.ActionButton>
+        </muxc:InfoBar>
+
+        <!-- 信息态（如 settings.yaml 不存在）与错误态 -->
+        <muxc:InfoBar
+            x:Name="InfoBarArea"
+            Grid.Row="3"
+            IsClosable="False"
+            IsOpen="False" />
+
+        <Grid Grid.Row="4" ColumnSpacing="24">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="360" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Col0：编辑器 -->
+            <Grid Grid.Column="0" RowSpacing="8">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <Grid Grid.Row="0" ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock
+                        x:Name="PathText"
+                        Grid.Column="0"
+                        VerticalAlignment="Center"
+                        Style="{StaticResource CaptionTextBlockStyle}"
+                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                        Text="settings.yaml" />
+                    <StackPanel
+                        Grid.Column="1"
+                        Orientation="Horizontal"
+                        Spacing="8">
+                        <TextBlock
+                            VerticalAlignment="Center"
+                            Style="{StaticResource CaptionTextBlockStyle}"
+                            Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                            Text="纯文本模式" />
+                        <Button
+                            AutomationProperties.Name="在资源管理器中打开 settings.yaml 所在目录"
+                            Click="OnOpenSettingsFolderClick"
+                            Content="打开目录" />
+                    </StackPanel>
+                </Grid>
+
+                <Grid Grid.Row="1">
+                    <!-- 加载骨架：规范 §9.4 要求"编辑器骨架而非空白" -->
+                    <Border
+                        x:Name="EditorSkeleton"
+                        Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                        BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                        BorderThickness="1"
+                        CornerRadius="{ThemeResource ControlCornerRadius}">
+                        <StackPanel
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Spacing="8">
+                            <muxc:ProgressRing
+                                Width="24"
+                                Height="24"
+                                IsActive="True" />
+                            <TextBlock
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="正在读取 settings.yaml…" />
+                        </StackPanel>
+                    </Border>
+
+                    <detail:YamlEditorView
+                        x:Name="YamlEditor"
+                        AutomationProperties.LabeledBy="{x:Bind PathText}"
+                        Visibility="Collapsed" />
+
+                    <!-- 读取失败时禁用编辑（不得显示空文档让用户误以为文件是空的，规范 §9.4） -->
+                    <StackPanel
+                        x:Name="EditorFailed"
+                        MaxWidth="320"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Spacing="8"
+                        Visibility="Collapsed">
+                        <FontIcon
+                            HorizontalAlignment="Center"
+                            AutomationProperties.AccessibilityView="Raw"
+                            FontSize="24"
+                            Glyph="&#xE783;" />
+                        <TextBlock
+                            HorizontalAlignment="Center"
+                            Style="{StaticResource BodyLargeStrongTextBlockStyle}"
+                            Text="无法读取 settings.yaml" />
+                        <TextBlock
+                            x:Name="EditorFailedText"
+                            HorizontalAlignment="Center"
+                            Style="{StaticResource BodyTextBlockStyle}"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            TextAlignment="Center"
+                            TextWrapping="Wrap" />
+                        <Button
+                            HorizontalAlignment="Center"
+                            AutomationProperties.Name="重试读取 settings.yaml"
+                            Click="OnReloadClick"
+                            Content="重试" />
+                    </StackPanel>
+                </Grid>
+            </Grid>
+
+            <!-- Col1：设置面板 -->
+            <ScrollView Grid.Column="1" VerticalScrollBarVisibility="Auto">
+                <StackPanel Spacing="8">
+                    <!-- 隔离策略：4 个维度各一组二选一 + 一句后果说明 -->
+                    <Expander HorizontalAlignment="Stretch" IsExpanded="True">
+                        <Expander.Header>
+                            <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="隔离策略" />
+                        </Expander.Header>
+                        <StackPanel Spacing="12">
+                            <StackPanel Spacing="4">
+                                <muxc:RadioButtons
+                                    x:Name="WorkspaceRadios"
+                                    AutomationProperties.Name="工作区隔离策略"
+                                    SelectionChanged="OnWorkspaceModeChanged" />
+                                <TextBlock
+                                    Style="{StaticResource BodyTextBlockStyle}"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Text="共享时实例的工作区通过 junction 指向 shared/workspaces/&lt;目录名&gt;，多个实例共用同一份工作区文件。"
+                                    TextWrapping="Wrap" />
+                            </StackPanel>
+
+                            <StackPanel Spacing="4">
+                                <muxc:RadioButtons
+                                    x:Name="SavesRadios"
+                                    AutomationProperties.Name="存档隔离策略"
+                                    SelectionChanged="OnSavesModeChanged" />
+                                <TextBlock
+                                    Style="{StaticResource BodyTextBlockStyle}"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Text="共享时多个实例读写同一份 sessions 存档目录，任一侧的改动对其它实例立即可见。"
+                                    TextWrapping="Wrap" />
+                            </StackPanel>
+
+                            <StackPanel Spacing="4">
+                                <muxc:RadioButtons
+                                    x:Name="SettingsRadios"
+                                    AutomationProperties.Name="设置隔离策略"
+                                    SelectionChanged="OnSettingsModeChanged" />
+                                <TextBlock
+                                    Style="{StaticResource BodyTextBlockStyle}"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Text="共享时 settings.yaml 指向共享文件；本地与共享内容不一致时会登记共享冲突，需你显式选择以哪一侧为准。"
+                                    TextWrapping="Wrap" />
+                            </StackPanel>
+
+                            <StackPanel Spacing="4">
+                                <muxc:RadioButtons
+                                    x:Name="CredentialsRadios"
+                                    AutomationProperties.Name="凭证隔离策略"
+                                    SelectionChanged="OnCredentialsModeChanged" />
+                                <TextBlock
+                                    Style="{StaticResource BodyTextBlockStyle}"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Text="继承主 home 时复用全局凭证；本实例独立时使用实例目录内的凭证，互不影响。"
+                                    TextWrapping="Wrap" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Expander>
+
+                    <!-- 实例信息（名称 / 图标 / 颜色 / 备注 / 引擎版本） -->
+                    <Expander HorizontalAlignment="Stretch" IsExpanded="False">
+                        <Expander.Header>
+                            <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="实例信息" />
+                        </Expander.Header>
+                        <StackPanel Spacing="12">
+                            <TextBox
+                                x:Name="NameBox"
+                                AutomationProperties.Name="实例名称"
+                                Header="名称"
+                                MaxLength="48"
+                                PlaceholderText="实例显示名" />
+
+                            <TextBox
+                                x:Name="IconBox"
+                                AutomationProperties.Name="实例图标"
+                                Header="图标"
+                                MaxLength="8"
+                                PlaceholderText="一个 emoji，留空则不显示图标" />
+
+                            <TextBox
+                                x:Name="ColorBox"
+                                AutomationProperties.Name="实例强调色"
+                                Header="强调色"
+                                PlaceholderText="#5B8DEF，留空则使用默认色" />
+
+                            <TextBox
+                                x:Name="NoteBox"
+                                AcceptsReturn="True"
+                                AutomationProperties.Name="实例备注"
+                                Header="备注"
+                                PlaceholderText="给自己看的说明"
+                                TextWrapping="Wrap" />
+
+                            <ComboBox
+                                x:Name="EngineBox"
+                                HorizontalAlignment="Stretch"
+                                AutomationProperties.Name="绑定的引擎版本"
+                                Header="引擎版本" />
+
+                            <TextBlock
+                                x:Name="DirNameText"
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                TextWrapping="Wrap" />
+
+                            <Button
+                                x:Name="SaveMetaButton"
+                                HorizontalAlignment="Left"
+                                AutomationProperties.Name="保存实例信息"
+                                Click="OnSaveMetaClick"
+                                Content="保存实例信息" />
+                        </StackPanel>
+                    </Expander>
+
+                    <!-- 启动 -->
+                    <Expander HorizontalAlignment="Stretch" IsExpanded="False">
+                        <Expander.Header>
+                            <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="启动" />
+                        </Expander.Header>
+                        <StackPanel Spacing="12">
+                            <ToggleSwitch
+                                x:Name="AutoOpenSwitch"
+                                AutomationProperties.Name="启动后自动打开界面"
+                                Header="启动后自动打开界面"
+                                Toggled="OnAutoOpenToggled" />
+
+                            <StackPanel Spacing="4">
+                                <TextBox
+                                    x:Name="AppArgsBox"
+                                    AutomationProperties.Name="追加启动参数"
+                                    Header="追加参数"
+                                    PlaceholderText="--flag value（以空格分隔）" />
+                                <TextBlock
+                                    Style="{StaticResource CaptionTextBlockStyle}"
+                                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                    Text="以空格分隔为参数数组；本版本不支持带空格的单个参数（不做引号解析，避免与后端 argv 语义漂移）。"
+                                    TextWrapping="Wrap" />
+                                <Button
+                                    HorizontalAlignment="Left"
+                                    AutomationProperties.Name="保存启动参数"
+                                    Click="OnSaveLaunchClick"
+                                    Content="保存启动设置" />
+                            </StackPanel>
+
+                            <TextBlock
+                                x:Name="LaunchPathsText"
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Expander>
+
+                    <!-- 危险操作 -->
+                    <Expander HorizontalAlignment="Stretch" IsExpanded="False">
+                        <Expander.Header>
+                            <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="危险操作" />
+                        </Expander.Header>
+                        <StackPanel Spacing="8">
+                            <TextBlock
+                                Style="{StaticResource BodyTextBlockStyle}"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="删除实例会从启动器移除该实例的记录；是否同时删除磁盘文件由你在确认对话框中决定。"
+                                TextWrapping="Wrap" />
+                            <Button
+                                x:Name="DeleteButton"
+                                HorizontalAlignment="Left"
+                                AutomationProperties.Name="删除实例"
+                                Click="OnDeleteClick">
+                                <!-- Danger 语义：文字用内置危险色（规范 §9.4「删除实例」） -->
+                                <TextBlock
+                                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                    Text="删除实例…" />
+                            </Button>
+                        </StackPanel>
+                    </Expander>
+                </StackPanel>
+            </ScrollView>
+        </Grid>
+    </Grid>
+</UserControl>

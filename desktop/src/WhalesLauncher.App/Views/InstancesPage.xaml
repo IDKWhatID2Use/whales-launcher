@@ -1,0 +1,543 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    P1 实例列表（视觉规范 §9.2）。
+
+    结构对应规范 §9.0 的通用骨架：
+      Row0 页头（Controls/PageHeader，统一页头，本页不自拼）
+      Row1 工具条（搜索 / 状态筛选 / 排序 / 刷新）
+      Row2 InfoBar 区（错误 + 降级聚合；无状态时整行 Collapsed，不占位）
+      Row3 内容区（GridView 卡片网格 / 首屏 ProgressRing / 两种空态）
+
+    卡片模板里的取值全部由 code-behind 的 `CardView` 视图模型算好（见 InstancesPage.xaml.cs）：
+    卡片结构随状态变化多（五态 × 按钮文案 × 忙碌环 × 降级行），把"状态 → 呈现"的映射收在
+    一处，XAML 只留布局，x:Bind 也全部是编译期检查的强类型路径。
+-->
+<Page
+    x:Class="WhalesLauncher.Views.InstancesPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:controls="using:WhalesLauncher.Controls"
+    xmlns:muxc="using:Microsoft.UI.Xaml.Controls"
+    xmlns:views="using:WhalesLauncher.Views"
+    mc:Ignorable="d">
+
+    <Grid x:Name="RootGrid" Padding="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- Row0：页头。主操作放 PageHeader.Actions 槽（自带右对齐列）。 -->
+        <controls:PageHeader
+            x:Name="Header"
+            Grid.Row="0"
+            Title="实例"
+            Description="管理本机的 dsh 实例：启动、停止、打开目录与查看异常。">
+            <controls:PageHeader.Actions>
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <ProgressBar
+                        x:Name="RefreshBar"
+                        Width="120"
+                        VerticalAlignment="Center"
+                        IsIndeterminate="True"
+                        Visibility="Collapsed"
+                        AutomationProperties.Name="正在刷新实例列表" />
+                    <Button
+                        x:Name="RefreshButton"
+                        Click="OnRefreshClick"
+                        AutomationProperties.Name="刷新实例列表"
+                        ToolTipService.ToolTip="重新读取实例列表">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon Glyph="&#xE72C;" FontSize="16" />
+                            <TextBlock Text="刷新" />
+                        </StackPanel>
+                    </Button>
+                    <Button
+                        x:Name="CreateButton"
+                        Style="{StaticResource AccentButtonStyle}"
+                        Click="OnCreateClick"
+                        AutomationProperties.Name="新建实例">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon Glyph="&#xE710;" FontSize="16" />
+                            <TextBlock Text="新建实例" />
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </controls:PageHeader.Actions>
+        </controls:PageHeader>
+
+        <!-- Row1：工具条。搜索框常驻且不随数据刷新重建，避免刷新时失焦（规范 §9.2 要求）。 -->
+        <Grid Grid.Row="1" Margin="0,24,0,0" ColumnSpacing="16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <muxc:AutoSuggestBox
+                x:Name="SearchBox"
+                Grid.Column="0"
+                Width="320"
+                VerticalAlignment="Center"
+                QueryIcon="Find"
+                PlaceholderText="搜索实例名、目录名、备注"
+                TextChanged="OnSearchTextChanged"
+                AutomationProperties.Name="搜索实例" />
+
+            <muxc:SelectorBar
+                x:Name="StatusFilter"
+                Grid.Column="1"
+                VerticalAlignment="Center"
+                SelectionChanged="OnStatusFilterChanged"
+                AutomationProperties.Name="按状态筛选">
+                <muxc:SelectorBarItem x:Name="FilterAll" Text="全部" Tag="all" IsSelected="True" />
+                <muxc:SelectorBarItem x:Name="FilterRunning" Text="运行中" Tag="running" />
+                <muxc:SelectorBarItem x:Name="FilterStopped" Text="已停止" Tag="stopped" />
+                <muxc:SelectorBarItem x:Name="FilterAttention" Text="需处理" Tag="attention" />
+            </muxc:SelectorBar>
+
+            <ComboBox
+                x:Name="SortBox"
+                Grid.Column="3"
+                MinWidth="168"
+                VerticalAlignment="Center"
+                SelectedIndex="0"
+                SelectionChanged="OnSortChanged"
+                Header="排序"
+                AutomationProperties.Name="排序方式">
+                <ComboBoxItem Content="最近启动" />
+                <ComboBoxItem Content="名称" />
+                <ComboBoxItem Content="创建时间" />
+                <ComboBoxItem Content="插件数" />
+            </ComboBox>
+        </Grid>
+
+        <!-- Row2：InfoBar 区（错误 / 降级 / 筛选结果提示） -->
+        <StackPanel Grid.Row="2" Margin="0,16,0,0" Spacing="8">
+            <InfoBar
+                x:Name="ErrorBar"
+                Severity="Error"
+                Title="实例列表加载失败"
+                IsClosable="False"
+                IsOpen="False"
+                AutomationProperties.Name="实例列表加载失败" />
+            <InfoBar
+                x:Name="DegradeBar"
+                Severity="Warning"
+                Title="有实例需要处理"
+                IsClosable="False"
+                IsOpen="False"
+                AutomationProperties.Name="有实例需要处理" />
+            <InfoBar
+                x:Name="FilterBar"
+                Severity="Informational"
+                IsClosable="True"
+                IsOpen="False"
+                AutomationProperties.Name="筛选结果">
+                <InfoBar.ActionButton>
+                    <Button Content="清除筛选" Click="OnClearFilterClick" />
+                </InfoBar.ActionButton>
+            </InfoBar>
+        </StackPanel>
+
+        <!-- Row3：内容区。GridView 自带 ItemsWrapGrid 虚拟化面板，随宽度自动换列。 -->
+        <Grid Grid.Row="3" Margin="0,16,0,0">
+            <GridView
+                x:Name="InstanceGrid"
+                Padding="0"
+                SelectionMode="None"
+                IsItemClickEnabled="False"
+                IsTabStop="False"
+                Visibility="Collapsed"
+                AutomationProperties.Name="实例卡片列表">
+                <GridView.ItemContainerStyle>
+                    <!-- 卡片宽 320、间距 8：均为 4 epx 倍数（规范 §2.1 / §9.2） -->
+                    <Style TargetType="GridViewItem">
+                        <Setter Property="Width" Value="320" />
+                        <Setter Property="Margin" Value="0,0,8,8" />
+                        <Setter Property="Padding" Value="0" />
+                        <Setter Property="MinHeight" Value="0" />
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                        <Setter Property="VerticalContentAlignment" Value="Stretch" />
+                    </Style>
+                </GridView.ItemContainerStyle>
+                <GridView.ItemTemplate>
+                    <DataTemplate x:DataType="views:InstanceCard">
+                        <Border
+                            MinHeight="240"
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                            BorderThickness="1"
+                            CornerRadius="{ThemeResource ControlCornerRadius}">
+                            <Grid Padding="16" RowSpacing="8">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+
+                                <!-- 头像 + 名称 + 目录名。头像底色由 meta.color 派生（规范 §9.2 明示） -->
+                                <Grid Grid.Row="0" ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Border
+                                        Grid.Column="0"
+                                        Width="40"
+                                        Height="40"
+                                        CornerRadius="4"
+                                        Background="{x:Bind AccentTint}"
+                                        VerticalAlignment="Top"
+                                        AutomationProperties.AccessibilityView="Raw">
+                                        <TextBlock
+                                            Text="{x:Bind AvatarText}"
+                                            Style="{StaticResource BodyTextBlockStyle}"
+                                            Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                            HorizontalAlignment="Center"
+                                            VerticalAlignment="Center" />
+                                    </Border>
+                                    <StackPanel Grid.Column="1" Spacing="4">
+                                        <TextBlock
+                                            Text="{x:Bind Name}"
+                                            Style="{StaticResource BodyLargeStrongTextBlockStyle}"
+                                            TextTrimming="CharacterEllipsis"
+                                            ToolTipService.ToolTip="{x:Bind Name}"
+                                            AutomationProperties.HeadingLevel="Level3" />
+                                        <TextBlock
+                                            Text="{x:Bind DirName}"
+                                            Style="{StaticResource CaptionTextBlockStyle}"
+                                            Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                            TextTrimming="CharacterEllipsis"
+                                            ToolTipService.ToolTip="{x:Bind DirName}" />
+                                    </StackPanel>
+                                </Grid>
+
+                                <!-- 状态行：状态点 + 状态文字 + 忙碌环 + 端口/URL（规范 §9.2） -->
+                                <Grid Grid.Row="1" ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Ellipse
+                                        Grid.Column="0"
+                                        Width="8"
+                                        Height="8"
+                                        Fill="{x:Bind StateDot}"
+                                        VerticalAlignment="Center"
+                                        AutomationProperties.AccessibilityView="Raw" />
+                                    <TextBlock
+                                        Grid.Column="1"
+                                        Text="{x:Bind StateLabel}"
+                                        Style="{StaticResource BodyStrongTextBlockStyle}"
+                                        VerticalAlignment="Center" />
+                                    <ProgressRing
+                                        Grid.Column="2"
+                                        Width="20"
+                                        Height="20"
+                                        IsActive="{x:Bind BusyActive}"
+                                        Visibility="{x:Bind BusyVisibility}"
+                                        VerticalAlignment="Center"
+                                        AutomationProperties.Name="正在处理" />
+                                    <TextBlock
+                                        Grid.Column="3"
+                                        Text="{x:Bind EndpointLabel}"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                        TextTrimming="CharacterEllipsis"
+                                        VerticalAlignment="Center"
+                                        ToolTipService.ToolTip="{x:Bind EndpointTooltip}"
+                                        AutomationProperties.Name="{x:Bind EndpointTooltip}" />
+                                </Grid>
+
+                                <!-- 元信息：引擎版本 · 插件数 · 最近启动（TimeRelativeText 随定时器刷新） -->
+                                <StackPanel
+                                    Grid.Row="2"
+                                    Orientation="Horizontal"
+                                    Spacing="8"
+                                    AutomationProperties.Name="{x:Bind MetaSummary}">
+                                    <FontIcon
+                                        Glyph="&#xE950;"
+                                        FontSize="16"
+                                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                        VerticalAlignment="Center"
+                                        AutomationProperties.AccessibilityView="Raw" />
+                                    <TextBlock
+                                        Text="{x:Bind EngineVersion}"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        VerticalAlignment="Center" />
+                                    <TextBlock
+                                        Text="·"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                        VerticalAlignment="Center"
+                                        AutomationProperties.AccessibilityView="Raw" />
+                                    <TextBlock
+                                        Text="{x:Bind PluginText}"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        VerticalAlignment="Center" />
+                                    <TextBlock
+                                        Text="·"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                        VerticalAlignment="Center"
+                                        AutomationProperties.AccessibilityView="Raw" />
+                                    <TextBlock
+                                        Text="{x:Bind LastLaunchedText}"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        VerticalAlignment="Center" />
+                                </StackPanel>
+
+                                <!-- 异常态（problem）：契约硬性要求必须显示（contracts.ts:141-148） -->
+                                <InfoBar
+                                    Grid.Row="3"
+                                    Severity="Warning"
+                                    IsClosable="False"
+                                    IsOpen="True"
+                                    Visibility="{x:Bind ProblemVisibility}"
+                                    Message="{x:Bind ProblemText}"
+                                    AutomationProperties.Name="{x:Bind ProblemText}" />
+
+                                <!-- 降级说明（present=false / engineInstalled=false）：主按钮被禁用时必须说明原因 -->
+                                <StackPanel
+                                    Grid.Row="4"
+                                    Orientation="Horizontal"
+                                    Spacing="8"
+                                    Visibility="{x:Bind DegradedVisibility}"
+                                    AutomationProperties.Name="{x:Bind DegradedText}">
+                                    <FontIcon
+                                        Glyph="&#xE7BA;"
+                                        FontSize="16"
+                                        Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                        VerticalAlignment="Center"
+                                        AutomationProperties.AccessibilityView="Raw" />
+                                    <TextBlock
+                                        Text="{x:Bind DegradedText}"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                        TextWrapping="Wrap" />
+                                </StackPanel>
+
+                                <!-- 操作行：主按钮（启动/停止/重启）+ 打开界面 + 详情 + 更多 -->
+                                <Grid Grid.Row="5" Margin="0,4,0,0" ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <Button
+                                        Grid.Column="0"
+                                        MinWidth="112"
+                                        Style="{Binding PrimaryStyle}"
+                                        IsEnabled="{x:Bind PrimaryEnabled}"
+                                        ToolTipService.ToolTip="{x:Bind PrimaryTooltip}"
+                                        AutomationProperties.Name="{x:Bind PrimaryText}"
+                                        AutomationProperties.HelpText="{x:Bind PrimaryTooltip}"
+                                        Click="OnPrimaryActionClick">
+                                        <TextBlock Text="{x:Bind PrimaryText}" TextTrimming="CharacterEllipsis" />
+                                    </Button>
+
+                                    <Button
+                                        Grid.Column="1"
+                                        Content="打开界面"
+                                        Visibility="{x:Bind OpenUiVisibility}"
+                                        IsEnabled="{x:Bind OpenUiEnabled}"
+                                        ToolTipService.ToolTip="{x:Bind OpenUiTooltip}"
+                                        AutomationProperties.Name="{x:Bind OpenUiTooltip}"
+                                        Click="OnOpenUiClick" />
+
+                                    <Button
+                                        Grid.Column="2"
+                                        Content="详情"
+                                        AutomationProperties.Name="查看实例详情"
+                                        Click="OnDetailClick" />
+
+                                    <DropDownButton
+                                        Grid.Column="4"
+                                        Content="更多"
+                                        AutomationProperties.Name="更多操作">
+                                        <!--
+                                            为什么这里用 MenuFlyout 而不是 CommandBarFlyout：规范 §9.10.3 要求
+                                            「打开目录」是**子菜单**（五选）。MenuFlyoutSubItem 是官方支持的嵌套
+                                            结构，CommandBarFlyout 的次要命令区没有该形态。CommandBarFlyout 仍按
+                                            §9.10.3 的"右键菜单"一行挂在卡片 Border 上。
+                                            卡片内的命令一律用 Click + Tag 而不是 Command 绑定：DataTemplate 的
+                                            x:Bind 数据根是 CardView，取不到 Page 上的命令属性。
+                                        -->
+                                        <DropDownButton.Flyout>
+                                            <MenuFlyout>
+                                                <MenuFlyoutItem
+                                                    Text="启动 / 停止"
+                                                    Tag="toggle"
+                                                    Click="OnCardMenuClick"
+                                                    AutomationProperties.Name="启动或停止实例" />
+                                                <MenuFlyoutItem
+                                                    Text="打开界面"
+                                                    Tag="openUi"
+                                                    Click="OnCardMenuClick"
+                                                    AutomationProperties.Name="在浏览器中打开界面" />
+                                                <MenuFlyoutSeparator />
+                                                <MenuFlyoutSubItem Text="打开文件夹" AutomationProperties.Name="打开实例文件夹">
+                                                    <MenuFlyoutItem
+                                                        Text="根目录"
+                                                        Tag="root"
+                                                        Click="OnCardMenuClick"
+                                                        AutomationProperties.Name="打开根目录" />
+                                                    <MenuFlyoutItem
+                                                        Text="主目录 home"
+                                                        Tag="home"
+                                                        Click="OnCardMenuClick"
+                                                        AutomationProperties.Name="打开主目录" />
+                                                    <MenuFlyoutItem
+                                                        Text="工作区 workspace"
+                                                        Tag="workspace"
+                                                        Click="OnCardMenuClick"
+                                                        AutomationProperties.Name="打开工作区目录" />
+                                                    <MenuFlyoutItem
+                                                        Text="日志 logs"
+                                                        Tag="logs"
+                                                        Click="OnCardMenuClick"
+                                                        AutomationProperties.Name="打开日志目录" />
+                                                    <MenuFlyoutItem
+                                                        Text="插件 plugins"
+                                                        Tag="plugins"
+                                                        Click="OnCardMenuClick"
+                                                        AutomationProperties.Name="打开插件目录" />
+                                                </MenuFlyoutSubItem>
+                                                <MenuFlyoutSeparator />
+                                                <MenuFlyoutItem
+                                                    Text="实例详情"
+                                                    Tag="detail"
+                                                    Click="OnCardMenuClick"
+                                                    AutomationProperties.Name="查看实例详情" />
+                                                <MenuFlyoutItem
+                                                    Text="编辑设置"
+                                                    Tag="edit"
+                                                    Click="OnCardMenuClick"
+                                                    AutomationProperties.Name="编辑实例设置" />
+                                                <MenuFlyoutItem
+                                                    Text="刷新状态"
+                                                    Tag="refresh"
+                                                    Click="OnCardMenuClick"
+                                                    AutomationProperties.Name="刷新该实例状态" />
+                                                <MenuFlyoutSeparator />
+                                                <MenuFlyoutItem
+                                                    Text="删除实例…"
+                                                    Tag="remove"
+                                                    Click="OnCardMenuClick"
+                                                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                                    AutomationProperties.Name="删除实例" />
+                                            </MenuFlyout>
+                                        </DropDownButton.Flyout>
+                                    </DropDownButton>
+                                </Grid>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </GridView.ItemTemplate>
+            </GridView>
+
+            <!-- 首屏加载：内容区居中 ProgressRing（规范 §9.0「加载中」） -->
+            <StackPanel
+                x:Name="FirstLoadPanel"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Spacing="16"
+                Visibility="Collapsed">
+                <ProgressRing
+                    Width="40"
+                    Height="40"
+                    IsActive="True"
+                    HorizontalAlignment="Center"
+                    AutomationProperties.Name="正在加载实例列表" />
+                <TextBlock
+                    Text="正在读取实例列表…"
+                    Style="{StaticResource BodyTextBlockStyle}"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    HorizontalAlignment="Center" />
+            </StackPanel>
+
+            <!-- 空态 A：一个实例都没有（引导创建） -->
+            <StackPanel
+                x:Name="EmptyPanel"
+                MaxWidth="480"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Spacing="8"
+                Visibility="Collapsed">
+                <FontIcon
+                    Glyph="&#xE7B8;"
+                    FontSize="32"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    HorizontalAlignment="Center"
+                    AutomationProperties.AccessibilityView="Raw" />
+                <TextBlock
+                    Text="还没有实例"
+                    Style="{StaticResource BodyLargeStrongTextBlockStyle}"
+                    HorizontalAlignment="Center" />
+                <TextBlock
+                    Text="实例是一份独立的 dsh 运行环境，拥有自己的工作区、插件与设置。创建一个实例后即可在这里启动并管理它。"
+                    Style="{StaticResource BodyTextBlockStyle}"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    TextWrapping="WrapWholeWords"
+                    TextAlignment="Center" />
+                <Button
+                    Content="创建第一个实例"
+                    Style="{StaticResource AccentButtonStyle}"
+                    HorizontalAlignment="Center"
+                    Margin="0,8,0,0"
+                    Click="OnCreateClick"
+                    AutomationProperties.Name="创建第一个实例" />
+            </StackPanel>
+
+            <!-- 空态 B：搜索/筛选无结果（文案与空态 A 严格区分，不得混用） -->
+            <StackPanel
+                x:Name="EmptyFilterPanel"
+                MaxWidth="480"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Spacing="8"
+                Visibility="Collapsed">
+                <FontIcon
+                    Glyph="&#xE721;"
+                    FontSize="32"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    HorizontalAlignment="Center"
+                    AutomationProperties.AccessibilityView="Raw" />
+                <TextBlock
+                    Text="没有匹配的实例"
+                    Style="{StaticResource BodyLargeStrongTextBlockStyle}"
+                    HorizontalAlignment="Center" />
+                <TextBlock
+                    x:Name="EmptyFilterHint"
+                    Text="换个关键词，或切换状态筛选。"
+                    Style="{StaticResource BodyTextBlockStyle}"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    TextWrapping="WrapWholeWords"
+                    TextAlignment="Center" />
+                <Button
+                    Content="清除筛选"
+                    HorizontalAlignment="Center"
+                    Margin="0,8,0,0"
+                    Click="OnClearFilterClick"
+                    AutomationProperties.Name="清除筛选条件" />
+            </StackPanel>
+        </Grid>
+    </Grid>
+</Page>

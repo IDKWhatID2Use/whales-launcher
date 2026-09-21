@@ -1,0 +1,149 @@
+{
+  "schema": "whaleslauncher.audit.pages/1",
+  "description": "Sample page list. Slugs match the visual spec section 9 page numbers. The navigation steps are data: copy this file and rewrite the steps for the real application. capture-window.ps1 step vocabulary: wait, focus, key, text, move, click, wheel, capture. NOTE: this file is ASCII only, so page titles are given as ASCII labels here; the Chinese titles live in docs/design/winui3-visual-spec.md.",
+  "exe": "",
+  "exeArgs": "",
+  "workDir": "",
+  "windowTitleLike": "WhalesLauncher",
+  "themeArgs": [],
+  "pages": [
+    {
+      "slug": "p1-instances",
+      "title": "P1 instance list",
+      "route": "P1",
+      "steps": [
+        { "Type": "wait", "Ms": 1200 }
+      ]
+    },
+    {
+      "slug": "p2-detail-plugins",
+      "title": "P2 instance detail - plugins",
+      "route": "P2",
+      "steps": [
+        { "Type": "click", "X": 200, "Y": 200 },
+        { "Type": "wait", "Ms": 600 },
+        { "Type": "click", "X": 300, "Y": 160 }
+      ]
+    },
+    {
+      "slug": "p3-detail-settings",
+      "title": "P3 instance detail - settings",
+      "route": "P3",
+      "steps": [
+        { "Type": "key", "Chord": "Ctrl+3" },
+        { "Type": "wait", "Ms": 800 }
+      ]
+    },
+    {
+      "slug": "p4-detail-saves",
+      "title": "P4 instance detail - saves",
+      "route": "P4",
+      "steps": [
+        { "Type": "key", "Chord": "Ctrl+4" },
+        { "Type": "wait", "Ms": 800 }
+      ]
+    },
+    {
+      "slug": "p5-detail-logs",
+      "title": "P5 instance detail - logs",
+      "route": "P5",
+      "steps": [
+        { "Type": "key", "Chord": "Ctrl+5" },
+        { "Type": "wait", "Ms": 800 }
+      ]
+    },
+    {
+      "slug": "p6-engines",
+      "title": "P6 engine versions",
+      "route": "P6",
+      "steps": [
+        { "Type": "key", "Chord": "Ctrl+6" },
+        { "Type": "wait", "Ms": 1000 }
+      ]
+    },
+    {
+      "slug": "p7-wizard-step1",
+      "title": "P7 create instance wizard - step 1",
+      "route": "P7.1",
+      "steps": [
+        { "Type": "key", "Chord": "Ctrl+N" },
+        { "Type": "wait", "Ms": 1000 }
+      ]
+    },
+    {
+      "slug": "p7-wizard-step2",
+      "title": "P7 create instance wizard - step 2",
+      "route": "P7.2",
+      "steps": [
+        { "Type": "key", "Chord": "Ctrl+N" },
+        { "Type": "wait", "Ms": 800 },
+        { "Type": "key", "Chord": "Tab" },
+        { "Type": "key", "Chord": "Right" },
+        { "Type": "wait", "Ms": 600 }
+      ]
+    },
+    {
+      "slug": "p7-wizard-step3",
+      "title": "P7 create instance wizard - step 3",
+      "route": "P7.3",
+      "steps": [
+        { "Type": "key", "Chord": "Ctrl+N" },
+        { "Type": "wait", "Ms": 800 },
+        { "Type": "key", "Chord": "Tab" },
+        { "Type": "key", "Chord": "Right" },
+        { "Type": "key", "Chord": "Right" },
+        { "Type": "wait", "Ms": 600 }
+      ]
+    },
+    {
+      "slug": "p7-wizard-step4",
+      "title": "P7 create instance wizard - step 4",
+      "route": "P7.4",
+      "steps": [
+        { "Type": "key", "Chord": "Ctrl+N" },
+        { "Type": "wait", "Ms": 800 },
+        { "Type": "key", "Chord": "Tab" },
+        { "Type": "key", "Chord": "Right" },
+        { "Type": "key", "Chord": "Right" },
+        { "Type": "key", "Chord": "Right" },
+        { "Type": "wait", "Ms": 600 }
+      ]
+    },
+    {
+      "slug": "p8-settings",
+      "title": "P8 global settings",
+      "route": "P8",
+      "steps": [
+        { "Type": "key", "Chord": "Ctrl+," },
+        { "Type": "wait", "Ms": 1000 }
+      ]
+    },
+    {
+      "slug": "shell-log-drawer",
+      "title": "Shell - log drawer open",
+      "route": "shell",
+      "steps": [
+        { "Type": "key", "Chord": "Ctrl+L" },
+        { "Type": "wait", "Ms": 900 }
+      ]
+    },
+    {
+      "slug": "overlay-app-menu",
+      "title": "Overlay - application menu open",
+      "route": "overlay",
+      "steps": [
+        { "Type": "key", "Chord": "F10" },
+        { "Type": "wait", "Ms": 700 }
+      ]
+    },
+    {
+      "slug": "overlay-context-menu",
+      "title": "Overlay - context menu on a list row",
+      "route": "overlay",
+      "steps": [
+        { "Type": "click", "X": 320, "Y": 320, "Button": "right" },
+        { "Type": "wait", "Ms": 700 }
+      ]
+    }
+  ]
+}

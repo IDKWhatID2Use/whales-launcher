@@ -1,0 +1,359 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    应用外壳（视觉规范 §9.1）。
+
+    结构（对应规范 §9.1 的布局骨架）：
+      Row0 [Auto] 官方 TitleBar：图标 + 标题 + 副标题（当前页名）
+                  ├─ LeftHeader  = MenuBar（菜单树来自后端 app:menu，界面不自己定义菜单）
+                  └─ RightHeader = 「运行日志」ToggleButton（带未读错误 InfoBadge）+ 主题切换 Button
+      Row1 [*]    SplitView（PanePlacement=Right、Overlay、OpenPaneLength=480）= 运行日志抽屉
+                  └─ Content = NavigationView（左实例栏 + 内容 Frame）
+      顶层        ToastHost（浮层宿主，§9.10.2；容器不拦截点击）
+
+    为什么状态点用 Style 而不是在 code-behind 取画刷：Style 的 Setter 里写 {ThemeResource}，
+    框架会在元素上求值并在主题切换时重新解析；code-behind 里取到的画刷对象换主题后不会刷新。
+-->
+<Window
+    x:Class="WhalesLauncher.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:muxc="using:Microsoft.UI.Xaml.Controls"
+    xmlns:controls="using:WhalesLauncher.Controls"
+    xmlns:detail="using:WhalesLauncher.Views.Detail"
+    xmlns:shell="using:WhalesLauncher.Shell">
+
+    <Grid x:Name="RootGrid">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <Grid.Resources>
+            <!-- 实例状态点（规范 §9.1：8×8 语义色，仅作辅色；状态同时有文字） -->
+            <Style x:Key="RailDotRunning" TargetType="Ellipse">
+                <Setter Property="Fill" Value="{ThemeResource SystemFillColorSuccessBrush}" />
+            </Style>
+            <Style x:Key="RailDotTransitional" TargetType="Ellipse">
+                <Setter Property="Fill" Value="{ThemeResource SystemFillColorAttentionBrush}" />
+            </Style>
+            <Style x:Key="RailDotCrashed" TargetType="Ellipse">
+                <Setter Property="Fill" Value="{ThemeResource SystemFillColorCriticalBrush}" />
+            </Style>
+            <Style x:Key="RailDotStopped" TargetType="Ellipse">
+                <Setter Property="Fill" Value="{ThemeResource TextFillColorTertiaryBrush}" />
+            </Style>
+
+            <!--
+                左栏行模板（规范 §9.1：头像 32×32 + 名称/状态 + 状态点）。
+
+                NavigationView 只有单一的 MenuItemTemplate（没有模板选择器），
+                所以"实例 / 新建实例 / 无匹配"三种行共用一个模板，靠 Visibility 分支。
+            -->
+            <DataTemplate x:Key="InstanceRailItemTemplate" x:DataType="shell:RailEntry">
+                <Grid>
+                    <!-- 实例行 -->
+                    <Grid MinHeight="40" ColumnSpacing="8" Visibility="{x:Bind InstanceVisibility}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <!-- 头像：emoji（meta.icon）或名称首字；尺寸取规范 §5.4 的图标档位 -->
+                        <Border
+                            Grid.Column="0"
+                            Width="32"
+                            Height="32"
+                            VerticalAlignment="Center"
+                            Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                            BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                            BorderThickness="1"
+                            CornerRadius="{ThemeResource ControlCornerRadius}"
+                            AutomationProperties.AccessibilityView="Raw">
+                            <TextBlock
+                                FontSize="16"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Text="{x:Bind AvatarText}" />
+                        </Border>
+
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock
+                                Style="{StaticResource BodyStrongTextBlockStyle}"
+                                Text="{x:Bind Name}"
+                                TextTrimming="CharacterEllipsis" />
+                            <TextBlock
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="{x:Bind StatusText}"
+                                TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+
+                        <StackPanel
+                            Grid.Column="2"
+                            VerticalAlignment="Center"
+                            Orientation="Horizontal"
+                            Spacing="8">
+                            <!-- 降级可见（契约硬要求：InstanceSummary.problem 必须显示出来） -->
+                            <FontIcon
+                                FontSize="16"
+                                Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                Glyph="&#xE7BA;"
+                                AutomationProperties.Name="{x:Bind ProblemText}"
+                                ToolTipService.ToolTip="{x:Bind ProblemText}"
+                                Visibility="{x:Bind ProblemVisibility}" />
+                            <Ellipse
+                                Width="8"
+                                Height="8"
+                                AutomationProperties.AccessibilityView="Raw"
+                                Style="{Binding DotStyle}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- 入口行：新建实例 / 引擎版本管理 / 全局设置（图标 + 文字） -->
+                    <StackPanel
+                        MinHeight="40"
+                        VerticalAlignment="Center"
+                        Orientation="Horizontal"
+                        Spacing="12"
+                        Visibility="{x:Bind SimpleVisibility}">
+                        <FontIcon
+                            FontSize="16"
+                            Glyph="{x:Bind Glyph}"
+                            ToolTipService.ToolTip="{x:Bind Tooltip}" />
+                        <TextBlock
+                            VerticalAlignment="Center"
+                            Style="{StaticResource BodyTextBlockStyle}"
+                            Text="{x:Bind Name}" />
+                    </StackPanel>
+
+                    <!-- 分隔线（实例区与操作区之间） -->
+                    <Border
+                        Height="1"
+                        VerticalAlignment="Center"
+                        Background="{ThemeResource DividerStrokeColorDefaultBrush}"
+                        AutomationProperties.AccessibilityView="Raw"
+                        Visibility="{x:Bind SeparatorVisibility}" />
+
+                    <!-- 筛选无结果的说明行（不可导航，见 MainWindow.OnNavSelectionChanged） -->
+                    <TextBlock
+                        VerticalAlignment="Center"
+                        Style="{StaticResource CaptionTextBlockStyle}"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Text="{x:Bind StatusText}"
+                        TextWrapping="Wrap"
+                        Visibility="{x:Bind NoMatchVisibility}" />
+                </Grid>
+            </DataTemplate>
+        </Grid.Resources>
+
+        <!-- Mica 不可用时的实色兜底层（规范 §3.3 的降级语义），默认折叠，由 MainWindow 探测后决定 -->
+        <Border
+            x:Name="BackdropFallback"
+            Grid.RowSpan="2"
+            Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
+            Visibility="Collapsed" />
+
+        <muxc:TitleBar
+            x:Name="AppTitleBar"
+            Grid.Row="0"
+            Title="WhalesLauncher"
+            IsBackButtonVisible="False"
+            IsPaneToggleButtonVisible="False"
+            BackRequested="OnBackRequested">
+            <muxc:TitleBar.IconSource>
+                <!-- 规范 §9.1 要求鲸鱼图标；项目没有位图资产，用系统 emoji 字体渲染 🐋（不引入外部文件）。
+                     注意：Glyph 里**不能**写成两个分开的数字字符引用（&#xD83D;&#xDC0B;）——
+                     XML 解析器会把它们当成两个孤立代理项并报 WMC9997「无效的字符」；
+                     直接写字面 emoji 或 &#x1F40B; 都可以。 -->
+                <FontIconSource FontFamily="Segoe UI Emoji" Glyph="🐋" />
+            </muxc:TitleBar.IconSource>
+
+            <!-- 应用菜单：结构由后端 app:menu 动态构造（契约：渲染层只是它的视图） -->
+            <muxc:TitleBar.LeftHeader>
+                <muxc:MenuBar x:Name="AppMenuBar" VerticalAlignment="Center" />
+            </muxc:TitleBar.LeftHeader>
+
+            <muxc:TitleBar.RightHeader>
+                <StackPanel
+                    VerticalAlignment="Center"
+                    Orientation="Horizontal"
+                    Spacing="8">
+                    <ToggleButton
+                        x:Name="LogToggle"
+                        Padding="8,4"
+                        AutomationProperties.Name="运行日志"
+                        ToolTipService.ToolTip="打开或关闭运行日志抽屉（Ctrl+L）">
+                        <ToggleButton.KeyboardAccelerators>
+                            <KeyboardAccelerator
+                                Key="L"
+                                Invoked="OnLogAcceleratorInvoked"
+                                Modifiers="Control" />
+                        </ToggleButton.KeyboardAccelerators>
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <SymbolIcon Symbol="Document" />
+                            <TextBlock VerticalAlignment="Center" Text="运行日志" />
+                            <muxc:InfoBadge
+                                x:Name="LogErrorBadge"
+                                VerticalAlignment="Center"
+                                AutomationProperties.Name="运行日志未读错误数"
+                                Visibility="Collapsed" />
+                        </StackPanel>
+                    </ToggleButton>
+
+                    <Button
+                        x:Name="ThemeButton"
+                        Padding="8,4"
+                        Click="OnThemeButtonClick">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <!-- E706 = Brightness（外观），深浅两套主题下语义一致 -->
+                            <FontIcon FontSize="16" Glyph="&#xE706;" />
+                            <TextBlock x:Name="ThemeLabel" VerticalAlignment="Center" Text="主题" />
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </muxc:TitleBar.RightHeader>
+        </muxc:TitleBar>
+
+        <muxc:SplitView
+            x:Name="LogDrawer"
+            Grid.Row="1"
+            DisplayMode="Overlay"
+            IsPaneOpen="False"
+            OpenPaneLength="480"
+            PanePlacement="Right">
+            <muxc:SplitView.Pane>
+                <Grid x:Name="LogDrawerPane" Background="{ThemeResource LayerFillColorDefaultBrush}">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <!-- Row0 抽屉标题 + 关闭 -->
+                    <Grid
+                        Grid.Row="0"
+                        Padding="16,16,16,8"
+                        ColumnSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock
+                            Grid.Column="0"
+                            VerticalAlignment="Center"
+                            Style="{StaticResource SubtitleTextBlockStyle}"
+                            Text="运行日志" />
+                        <Button
+                            Grid.Column="1"
+                            Click="OnCloseLogDrawerClick"
+                            AutomationProperties.Name="关闭日志抽屉"
+                            ToolTipService.ToolTip="关闭日志抽屉">
+                            <SymbolIcon Symbol="Cancel" />
+                        </Button>
+                    </Grid>
+
+                    <!-- Row1 来源选择 + 跟随（480 宽放不下一行四个控件，拆两行避免文本放大时被裁） -->
+                    <Grid
+                        Grid.Row="1"
+                        Padding="16,0,16,8"
+                        ColumnSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <ComboBox
+                            x:Name="LogSourceBox"
+                            Grid.Column="0"
+                            HorizontalAlignment="Stretch"
+                            AutomationProperties.Name="日志来源"
+                            ToolTipService.ToolTip="选择日志来源：全部实例或某个实例" />
+                        <ToggleButton
+                            x:Name="LogFollowToggle"
+                            Grid.Column="1"
+                            IsChecked="True"
+                            AutomationProperties.Name="跟随最新日志"
+                            ToolTipService.ToolTip="打开时自动滚动到最新一行；向上滚动会暂停跟随">
+                            <TextBlock Text="跟随" />
+                        </ToggleButton>
+                    </Grid>
+
+                    <!-- Row2 打开日志目录 / 复制全部 -->
+                    <StackPanel
+                        Grid.Row="2"
+                        Padding="16,0,16,8"
+                        Orientation="Horizontal"
+                        Spacing="8">
+                        <Button
+                            x:Name="OpenLogFolderButton"
+                            AutomationProperties.Name="打开日志目录">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <SymbolIcon Symbol="Folder" />
+                                <TextBlock VerticalAlignment="Center" Text="打开日志目录" />
+                            </StackPanel>
+                        </Button>
+                        <Button
+                            x:Name="CopyAllButton"
+                            AutomationProperties.Name="复制全部日志">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <SymbolIcon Symbol="Copy" />
+                                <TextBlock VerticalAlignment="Center" Text="复制全部" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+
+                    <!-- Row3 日志内容：复用 P5 的 LogView（§9.1 明确要求复用），订阅由外壳负责 -->
+                    <detail:LogView
+                        x:Name="LogSurface"
+                        Grid.Row="3"
+                        Margin="8,0,8,0" />
+
+                    <!-- Row4 状态条 -->
+                    <TextBlock
+                        x:Name="LogCountText"
+                        Grid.Row="4"
+                        Margin="16,8,16,16"
+                        Style="{StaticResource CaptionTextBlockStyle}"
+                        Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                </Grid>
+            </muxc:SplitView.Pane>
+
+            <muxc:NavigationView
+                x:Name="Nav"
+                AlwaysShowHeader="False"
+                IsBackButtonVisible="Collapsed"
+                IsSettingsVisible="False"
+                IsTitleBarAutoPaddingEnabled="False"
+                MenuItemTemplate="{StaticResource InstanceRailItemTemplate}"
+                PaneDisplayMode="Auto"
+                SelectionChanged="OnNavSelectionChanged">
+                <muxc:NavigationView.PaneHeader>
+                    <muxc:AutoSuggestBox
+                        x:Name="InstanceFilter"
+                        PlaceholderText="筛选实例"
+                        QueryIcon="Find"
+                        AutomationProperties.Name="筛选实例"
+                        TextChanged="OnInstanceFilterChanged" />
+                </muxc:NavigationView.PaneHeader>
+
+                <!-- 内容层（规范 §3.3）：Mica 之上铺一层 LayerFillColorDefaultBrush -->
+                <Grid Background="{ThemeResource LayerFillColorDefaultBrush}">
+                    <Frame x:Name="ContentFrame" />
+                </Grid>
+            </muxc:NavigationView>
+        </muxc:SplitView>
+
+        <!-- 浮层宿主（§9.1 / §9.10.2）：右上角，顶部偏移 = 标题栏 48 + 8；容器不拦截点击 -->
+        <controls:ToastHost
+            x:Name="ToastLayer"
+            Grid.Row="0"
+            Grid.RowSpan="2"
+            Margin="0,56,24,0"
+            HorizontalAlignment="Right"
+            VerticalAlignment="Top"
+            Canvas.ZIndex="1"
+            IsHitTestVisible="False" />
+    </Grid>
+</Window>

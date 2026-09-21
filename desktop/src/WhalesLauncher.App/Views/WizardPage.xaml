@@ -1,0 +1,448 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    P7 创建实例向导（4 步）—— 视觉规范 §9.8。
+
+    结构 = 规范 §9.0 通用骨架：
+      Row0 页头（PageHeader + 步骤指示 SelectorBar）
+      Row1 InfoBar 区（校验提示 / 提交失败的原文错误）
+      Row2 内容区（左：当前步骤；右：320 epx 常驻摘要卡）
+      Row3 底部操作条（取消 / 上一步 / 创建）
+
+    步骤指示**不**使用自制步骤条：规范 §11 U03 明确「官方无向导/Stepper 控件」，
+    选定方案是用 SelectorBar + IsEnabled 控制可达性。
+-->
+<Page
+    x:Class="WhalesLauncher.Views.WizardPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:WhalesLauncher.Controls">
+
+    <!--
+        页面级样式：供 code-behind 里动态构造的列表行/模板项复用。
+        刻意放在 Page.Resources 而不是 Controls/：这些样式只服务本页，跨页复用才需要登记共享控件（约定 §7）。
+        全部 BasedOn 内置字阶样式，不新增字号。
+    -->
+    <Page.Resources>
+        <Style x:Key="WizardRowTitleStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyStrongTextBlockStyle}" />
+        <Style x:Key="WizardRowBodyStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyTextBlockStyle}">
+            <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+        </Style>
+        <Style x:Key="WizardRowMetaStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextBlockStyle}" />
+        <Style x:Key="WizardRowMetaTertiaryStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextBlockStyle}">
+            <Setter Property="Foreground" Value="{ThemeResource TextFillColorTertiaryBrush}" />
+        </Style>
+    </Page.Resources>
+
+    <Page.KeyboardAccelerators>
+        <!-- Esc = 取消（有输入时先确认）。规范 §9.8。 -->
+        <KeyboardAccelerator Key="Escape" Invoked="OnCancelAccelerator" />
+        <!-- Enter = 下一步 / 末步创建。规范 §9.8 与任务要求。 -->
+        <KeyboardAccelerator Key="Enter" Invoked="OnEnterAccelerator" />
+        <!-- Ctrl+Enter = 创建（仅末步）。规范 §9.8。 -->
+        <KeyboardAccelerator Key="Enter" Modifiers="Control" Invoked="OnCreateAccelerator" />
+        <!-- Alt+Left = 上一步。规范 §9.8。VirtualKeyModifiers.Menu 即 Alt。 -->
+        <KeyboardAccelerator Key="Left" Modifiers="Menu" Invoked="OnBackAccelerator" />
+    </Page.KeyboardAccelerators>
+
+    <!-- 页面根 Padding 随窗口宽度在 12 / 24 之间切换（规范 §2.1、§9.0）。 -->
+    <Grid x:Name="RootGrid" Padding="12">
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup x:Name="GutterStates">
+                <VisualState x:Name="NarrowGutter" />
+                <VisualState x:Name="WideGutter">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowWidth="640" />
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="RootGrid.Padding" Value="24" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
+
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- ============================ Row 0：页头 + 步骤指示 ============================ -->
+        <StackPanel Grid.Row="0" Spacing="16">
+            <controls:PageHeader
+                Title="创建实例"
+                Description="四步完成：名称与外观 → 引擎版本 → profile 模板 → 隔离策略。带 * 的步骤必须先填完才能继续。" />
+
+            <SelectorBar x:Name="StepBar" SelectionChanged="OnStepSelectionChanged">
+                <SelectorBarItem x:Name="Step1Item" Text="1 名称与外观" />
+                <SelectorBarItem x:Name="Step2Item" Text="2 引擎版本" IsEnabled="False" />
+                <SelectorBarItem x:Name="Step3Item" Text="3 profile 模板" IsEnabled="False" />
+                <SelectorBarItem x:Name="Step4Item" Text="4 隔离策略" IsEnabled="False" />
+            </SelectorBar>
+        </StackPanel>
+
+        <!-- ============================ Row 1：InfoBar 区 ============================ -->
+        <InfoBar
+            x:Name="StatusBar"
+            Grid.Row="1"
+            Margin="0,16,0,0"
+            IsOpen="False"
+            IsClosable="True" />
+
+        <!-- ============================ Row 2：步骤内容 + 常驻摘要 ============================ -->
+        <Grid Grid.Row="2" Margin="0,16,0,0" ColumnSpacing="24">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="320" />
+            </Grid.ColumnDefinitions>
+
+            <ScrollView Grid.Column="0" VerticalScrollBarVisibility="Auto">
+                <Grid x:Name="StepHost">
+
+                    <!-- ======== 步骤 1：名称与外观 ======== -->
+                    <StackPanel x:Name="Panel1" Spacing="16">
+                        <StackPanel Spacing="4">
+                            <TextBox
+                                x:Name="NameBox"
+                                Header="实例名称 *"
+                                PlaceholderText="例如：我的工作区"
+                                MaxLength="48"
+                                TextChanged="OnNameChanged" />
+                            <TextBlock
+                                x:Name="NameErrorText"
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                TextWrapping="Wrap"
+                                Visibility="Collapsed" />
+                        </StackPanel>
+
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="目录名预览" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                            <TextBlock
+                                x:Name="DirPreviewText"
+                                Style="{StaticResource BodyTextBlockStyle}"
+                                Text="—" />
+                            <TextBlock
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                TextWrapping="Wrap"
+                                Text="仅作预览。真实目录名由后端生成（含与既有实例的去重），以后端返回为准。" />
+                        </StackPanel>
+
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="图标" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                            <!--
+                                这里的 FontSize 是**图标（emoji 字形）尺寸**，取自规范 §5.4 的图标档位 16/20/24/32，
+                                不是文本字号 —— 文本字号一律走字阶样式，全文件没有自定义文本字号。
+                            -->
+                            <GridView
+                                x:Name="IconGrid"
+                                SelectionMode="Single"
+                                SelectedIndex="0"
+                                SelectionChanged="OnIconSelectionChanged"
+                                ScrollViewer.VerticalScrollBarVisibility="Disabled">
+                                <GridViewItem AutomationProperties.Name="鲸鱼"><TextBlock Text="🐳" FontSize="20" /></GridViewItem>
+                                <GridViewItem AutomationProperties.Name="鲸"><TextBlock Text="🐋" FontSize="20" /></GridViewItem>
+                                <GridViewItem AutomationProperties.Name="海浪"><TextBlock Text="🌊" FontSize="20" /></GridViewItem>
+                                <GridViewItem AutomationProperties.Name="火箭"><TextBlock Text="🚀" FontSize="20" /></GridViewItem>
+                                <GridViewItem AutomationProperties.Name="齿轮"><TextBlock Text="⚙️" FontSize="20" /></GridViewItem>
+                                <GridViewItem AutomationProperties.Name="拼图"><TextBlock Text="🧩" FontSize="20" /></GridViewItem>
+                                <GridViewItem AutomationProperties.Name="包裹"><TextBlock Text="📦" FontSize="20" /></GridViewItem>
+                                <GridViewItem AutomationProperties.Name="靶心"><TextBlock Text="🎯" FontSize="20" /></GridViewItem>
+                                <GridViewItem AutomationProperties.Name="扳手"><TextBlock Text="🔧" FontSize="20" /></GridViewItem>
+                                <GridViewItem AutomationProperties.Name="试管"><TextBlock Text="🧪" FontSize="20" /></GridViewItem>
+                                <GridViewItem AutomationProperties.Name="书籍"><TextBlock Text="📚" FontSize="20" /></GridViewItem>
+                                <GridViewItem AutomationProperties.Name="工具"><TextBlock Text="🛠️" FontSize="20" /></GridViewItem>
+                            </GridView>
+                        </StackPanel>
+
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="强调色" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                            <!--
+                                调色板刻意**只引用内置画刷键**，不写任何 hex（规范 §1.3 白名单 + §11 U16）。
+                                提交时的 #RRGGBB 由代码从这些已解析的画刷里读出（见 WizardPage.xaml.cs 的 ReadPaletteHex）。
+                            -->
+                            <GridView
+                                x:Name="ColorGrid"
+                                SelectionMode="Single"
+                                SelectedIndex="0"
+                                SelectionChanged="OnColorSelectionChanged"
+                                ScrollViewer.VerticalScrollBarVisibility="Disabled">
+                                <GridViewItem AutomationProperties.Name="系统强调色">
+                                    <Border x:Name="SwatchAccent" Width="24" Height="24" CornerRadius="4" Background="{ThemeResource AccentFillColorDefaultBrush}" />
+                                </GridViewItem>
+                                <GridViewItem AutomationProperties.Name="绿色">
+                                    <Border x:Name="SwatchSuccess" Width="24" Height="24" CornerRadius="4" Background="{ThemeResource SystemFillColorSuccessBrush}" />
+                                </GridViewItem>
+                                <GridViewItem AutomationProperties.Name="黄色">
+                                    <Border x:Name="SwatchCaution" Width="24" Height="24" CornerRadius="4" Background="{ThemeResource SystemFillColorCautionBrush}" />
+                                </GridViewItem>
+                                <GridViewItem AutomationProperties.Name="红色">
+                                    <Border x:Name="SwatchCritical" Width="24" Height="24" CornerRadius="4" Background="{ThemeResource SystemFillColorCriticalBrush}" />
+                                </GridViewItem>
+                                <GridViewItem AutomationProperties.Name="蓝紫色">
+                                    <Border x:Name="SwatchAttention" Width="24" Height="24" CornerRadius="4" Background="{ThemeResource SystemFillColorAttentionBrush}" />
+                                </GridViewItem>
+                                <GridViewItem AutomationProperties.Name="中性灰">
+                                    <Border x:Name="SwatchNeutral" Width="24" Height="24" CornerRadius="4" Background="{ThemeResource SystemFillColorSolidNeutralBrush}" />
+                                </GridViewItem>
+                            </GridView>
+                            <TextBlock
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                TextWrapping="Wrap"
+                                Text="色板取自系统内置画刷，深浅色主题下取色不同；它同时决定实例卡片头像的底色。" />
+                        </StackPanel>
+
+                        <TextBox
+                            x:Name="NoteBox"
+                            Header="备注（可选）"
+                            PlaceholderText="这个实例是用来做什么的"
+                            MaxLength="200"
+                            AcceptsReturn="True"
+                            TextWrapping="Wrap"
+                            TextChanged="OnNoteChanged"
+                            MinHeight="88" />
+                    </StackPanel>
+
+                    <!-- ======== 步骤 2：引擎版本 ======== -->
+                    <StackPanel x:Name="Panel2" Spacing="16" Visibility="Collapsed">
+                        <TextBlock
+                            Style="{StaticResource BodyTextBlockStyle}"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            TextWrapping="Wrap"
+                            Text="实例必须绑定一个**已安装**的 dsh 引擎版本。未安装的版本列在下方，需要先去「引擎版本」页安装。" />
+
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="已安装" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                            <ListView
+                                x:Name="InstalledEngineList"
+                                SelectionMode="Single"
+                                SelectionChanged="OnInstalledEngineSelectionChanged"
+                                MaxHeight="240" />
+                            <TextBlock
+                                x:Name="InstalledEmptyText"
+                                Style="{StaticResource BodyTextBlockStyle}"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                TextWrapping="Wrap"
+                                Visibility="Collapsed"
+                                Text="本机还没有安装任何 dsh 引擎版本。" />
+                        </StackPanel>
+
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="可安装但尚未安装" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                            <ListView
+                                x:Name="AvailableEngineList"
+                                SelectionMode="None"
+                                MaxHeight="200" />
+                            <TextBlock
+                                x:Name="AvailableEmptyText"
+                                Style="{StaticResource BodyTextBlockStyle}"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                TextWrapping="Wrap"
+                                Visibility="Collapsed"
+                                Text="没有查询到未安装的版本（可能未联网，或 registry 不可达）。" />
+                        </StackPanel>
+
+                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <Button x:Name="RefreshAvailableButton" Content="刷新可用版本" Click="OnRefreshAvailableClick" />
+                            <Button x:Name="GoEnginesButton" Content="去引擎版本管理" Click="OnGoEnginesClick" />
+                            <ProgressRing x:Name="AvailableRing" IsActive="False" Width="20" Height="20" Visibility="Collapsed" />
+                            <TextBlock
+                                x:Name="AvailableHintText"
+                                VerticalAlignment="Center"
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                        </StackPanel>
+                    </StackPanel>
+
+                    <!-- ======== 步骤 3：profile 模板 ======== -->
+                    <StackPanel x:Name="Panel3" Spacing="16" Visibility="Collapsed">
+                        <TextBlock
+                            Style="{StaticResource BodyTextBlockStyle}"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            TextWrapping="Wrap"
+                            Text="模板决定实例创建时会装上哪些 dsh 组合包。列表与组合包来自契约 BUNDLE_TEMPLATES，界面不自行维护第二份清单。" />
+                        <RadioButtons x:Name="TemplateRadios" MaxColumns="1" SelectionChanged="OnTemplateSelectionChanged" />
+                    </StackPanel>
+
+                    <!-- ======== 步骤 4：隔离策略 ======== -->
+                    <StackPanel x:Name="Panel4" Spacing="24" Visibility="Collapsed">
+                        <TextBlock
+                            Style="{StaticResource BodyTextBlockStyle}"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            TextWrapping="Wrap"
+                            Text="四个维度各自独立决定「资源落在实例目录内」还是「与其它实例共用启动器根下的 shared/」。默认工作区独立，其余共享。" />
+
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="工作区" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                            <TextBlock
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                TextWrapping="Wrap"
+                                Text="共享时工作区 junction 到 shared/workspaces/&lt;目录名&gt;，多个实例看到同一份文件。" />
+                            <RadioButtons x:Name="WorkspaceRadios" MaxColumns="2" SelectedIndex="0" SelectionChanged="OnIsolationChanged">
+                                <x:String>独立</x:String>
+                                <x:String>共享</x:String>
+                            </RadioButtons>
+                        </StackPanel>
+
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="存档" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                            <TextBlock
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                TextWrapping="Wrap"
+                                Text="共享时多个实例读写同一份会话存档，可能出现互相覆盖。" />
+                            <RadioButtons x:Name="SavesRadios" MaxColumns="2" SelectedIndex="1" SelectionChanged="OnIsolationChanged">
+                                <x:String>独立</x:String>
+                                <x:String>共享</x:String>
+                            </RadioButtons>
+                        </StackPanel>
+
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="设置" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                            <TextBlock
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                TextWrapping="Wrap"
+                                Text="共享时 settings.yaml 由多个实例共用；后端会在内容冲突时登记冲突而不是静默覆盖。" />
+                            <RadioButtons x:Name="SettingsRadios" MaxColumns="2" SelectedIndex="1" SelectionChanged="OnIsolationChanged">
+                                <x:String>独立</x:String>
+                                <x:String>共享</x:String>
+                            </RadioButtons>
+                        </StackPanel>
+
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="凭证" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                            <TextBlock
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                TextWrapping="Wrap"
+                                Text="继承时会复用「主 home」里的登录凭证；独立则本实例自己登录。" />
+                            <RadioButtons x:Name="CredentialsRadios" MaxColumns="2" SelectedIndex="0" SelectionChanged="OnIsolationChanged">
+                                <x:String>继承主 home</x:String>
+                                <x:String>本实例独立</x:String>
+                            </RadioButtons>
+                        </StackPanel>
+                    </StackPanel>
+                </Grid>
+            </ScrollView>
+
+            <!-- ======== 常驻摘要卡（规范 §9.8 Col1） ======== -->
+            <Border
+                Grid.Column="1"
+                VerticalAlignment="Top"
+                Padding="16"
+                CornerRadius="{ThemeResource ControlCornerRadius}"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                BorderThickness="1"
+                BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}">
+                <StackPanel Spacing="16">
+                    <TextBlock Text="将要创建" Style="{StaticResource BodyStrongTextBlockStyle}" />
+
+                    <StackPanel Orientation="Horizontal" Spacing="12">
+                        <Border
+                            x:Name="SummaryAvatar"
+                            Width="48"
+                            Height="48"
+                            CornerRadius="4"
+                            Background="{ThemeResource AccentFillColorDefaultBrush}">
+                            <TextBlock
+                                x:Name="SummaryIconText"
+                                Text="🐳"
+                                FontSize="24"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Foreground="{ThemeResource TextFillColorInverseBrush}" />
+                        </Border>
+                        <StackPanel VerticalAlignment="Center" Spacing="4">
+                            <TextBlock
+                                x:Name="SummaryNameText"
+                                Style="{StaticResource BodyLargeStrongTextBlockStyle}"
+                                Text="（未填写）"
+                                TextWrapping="Wrap" />
+                            <TextBlock
+                                x:Name="SummaryDirText"
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                Text="—" />
+                        </StackPanel>
+                    </StackPanel>
+
+                    <Grid ColumnSpacing="12" RowSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="引擎" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <TextBlock x:Name="SummaryEngineText" Grid.Row="0" Grid.Column="1" Text="—" Style="{StaticResource CaptionTextBlockStyle}" TextWrapping="Wrap" />
+
+                        <TextBlock Grid.Row="1" Grid.Column="0" Text="模板" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <TextBlock x:Name="SummaryTemplateText" Grid.Row="1" Grid.Column="1" Text="—" Style="{StaticResource CaptionTextBlockStyle}" TextWrapping="Wrap" />
+
+                        <TextBlock Grid.Row="2" Grid.Column="0" Text="工作区" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <TextBlock x:Name="SummaryWorkspaceText" Grid.Row="2" Grid.Column="1" Text="—" Style="{StaticResource CaptionTextBlockStyle}" TextWrapping="Wrap" />
+
+                        <TextBlock Grid.Row="3" Grid.Column="0" Text="存档" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <TextBlock x:Name="SummarySavesText" Grid.Row="3" Grid.Column="1" Text="—" Style="{StaticResource CaptionTextBlockStyle}" TextWrapping="Wrap" />
+
+                        <TextBlock Grid.Row="4" Grid.Column="0" Text="设置" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <TextBlock x:Name="SummarySettingsText" Grid.Row="4" Grid.Column="1" Text="—" Style="{StaticResource CaptionTextBlockStyle}" TextWrapping="Wrap" />
+
+                        <TextBlock Grid.Row="5" Grid.Column="0" Text="凭证" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <TextBlock x:Name="SummaryCredentialsText" Grid.Row="5" Grid.Column="1" Text="—" Style="{StaticResource CaptionTextBlockStyle}" TextWrapping="Wrap" />
+
+                        <TextBlock Grid.Row="6" Grid.Column="0" Text="备注" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <TextBlock x:Name="SummaryNoteText" Grid.Row="6" Grid.Column="1" Text="—" Style="{StaticResource CaptionTextBlockStyle}" TextWrapping="Wrap" />
+                    </Grid>
+
+                    <TextBlock
+                        Style="{StaticResource CaptionTextBlockStyle}"
+                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                        TextWrapping="Wrap"
+                        Text="引擎版本与 profile 模板在提交后不可再改（需重建实例）。" />
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- ============================ Row 3：底部操作条 ============================ -->
+        <Grid Grid.Row="3" Margin="0,16,0,0" ColumnSpacing="16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <StackPanel
+                x:Name="SubmitProgressPanel"
+                Grid.Column="0"
+                Orientation="Horizontal"
+                Spacing="8"
+                VerticalAlignment="Center"
+                Visibility="Collapsed">
+                <ProgressBar x:Name="SubmitProgress" IsIndeterminate="True" Width="160" VerticalAlignment="Center" />
+                <TextBlock
+                    VerticalAlignment="Center"
+                    Style="{StaticResource BodyTextBlockStyle}"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Text="正在创建…" />
+            </StackPanel>
+
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                <Button x:Name="CancelButton" Content="取消" Click="OnCancelClick" />
+                <Button x:Name="BackButton" Content="上一步" Click="OnBackClick" IsEnabled="False" />
+                <Button x:Name="CreateButton" Content="创建" Style="{StaticResource AccentButtonStyle}" Click="OnCreateClick" />
+            </StackPanel>
+        </Grid>
+    </Grid>
+</Page>

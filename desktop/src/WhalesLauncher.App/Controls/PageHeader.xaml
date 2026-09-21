@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    页面页头（视觉规范 §9.0 通用页面骨架的 Row 0）。
+
+    统一封装「标题 + 一句说明 + 本页主操作区」，避免 8 个页面各写一套页头导致
+    字号/间距/对齐漂移（这是旧前端的主要问题之一）。
+-->
+<UserControl
+    x:Class="WhalesLauncher.Controls.PageHeader"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Grid ColumnSpacing="16">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+
+        <StackPanel Grid.Column="0" Spacing="4" VerticalAlignment="Center">
+            <TextBlock
+                x:Name="TitleText"
+                Style="{StaticResource TitleTextBlockStyle}"
+                TextWrapping="Wrap" />
+            <TextBlock
+                x:Name="DescriptionText"
+                Style="{StaticResource BodyTextBlockStyle}"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                TextWrapping="Wrap"
+                Visibility="Collapsed" />
+        </StackPanel>
+
+        <ContentPresenter
+            x:Name="ActionsHost"
+            Grid.Column="1"
+            VerticalAlignment="Center"
+            Visibility="Collapsed" />
+    </Grid>
+</UserControl>

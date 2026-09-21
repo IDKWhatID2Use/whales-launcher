@@ -1,0 +1,248 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    P8 全局设置 —— 视觉规范 §9.9。
+
+    结构 = 规范 §9.0 通用骨架：
+      Row0 页头（PageHeader，主操作「重新探测 Node」放在 Actions 里）
+      Row1 InfoBar 区（探测失败 / 保存失败）
+      Row2 内容区（ScrollView + 分区 Expander）
+
+    ⚠️ 契约缺口（规范 §11 的 U18）：LauncherConfig.theme 只有 dark / light，
+    没有「跟随系统」。本页据此**只提供两项**，并在界面上明确写出"不跟随系统"，
+    不使用 ElementTheme.Default 冒充浅色。契约扩展须先经 Lead 批准，页面不自行绕过。
+-->
+<Page
+    x:Class="WhalesLauncher.Views.SettingsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:WhalesLauncher.Controls">
+
+    <!--
+        页面级样式：供 code-behind 构造 Node 候选行时复用。
+        颜色只引用内置键，字号全部 BasedOn 内置字阶（约定 §6 铁律）。
+    -->
+    <Page.Resources>
+        <Style x:Key="SettingsRowTitleStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyStrongTextBlockStyle}" />
+        <Style x:Key="SettingsRowBodyStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyTextBlockStyle}" />
+        <Style x:Key="SettingsRowMetaStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextBlockStyle}" />
+        <Style x:Key="SettingsRowMetaTertiaryStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextBlockStyle}">
+            <Setter Property="Foreground" Value="{ThemeResource TextFillColorTertiaryBrush}" />
+        </Style>
+        <Style x:Key="SettingsBadgeOkStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextBlockStyle}">
+            <Setter Property="Foreground" Value="{ThemeResource SystemFillColorSuccessBrush}" />
+        </Style>
+        <Style x:Key="SettingsBadgeBadStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextBlockStyle}">
+            <Setter Property="Foreground" Value="{ThemeResource SystemFillColorCriticalBrush}" />
+        </Style>
+    </Page.Resources>
+
+    <Grid x:Name="RootGrid" Padding="12">
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup x:Name="GutterStates">
+                <VisualState x:Name="NarrowGutter" />
+                <VisualState x:Name="WideGutter">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowWidth="640" />
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="RootGrid.Padding" Value="24" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
+
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- ======== Row 0：页头 ======== -->
+        <controls:PageHeader
+            Grid.Row="0"
+            Title="全局设置"
+            Description="这些设置对所有实例生效。">
+            <controls:PageHeader.Actions>
+                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <ProgressRing x:Name="ProbeRing" IsActive="False" Width="20" Height="20" Visibility="Collapsed" />
+                    <Button x:Name="RedetectButton" Content="重新探测 Node" Click="OnRedetectClick" />
+                </StackPanel>
+            </controls:PageHeader.Actions>
+        </controls:PageHeader>
+
+        <!-- ======== Row 1：InfoBar 区 ======== -->
+        <InfoBar
+            x:Name="StatusBar"
+            Grid.Row="1"
+            Margin="0,16,0,0"
+            IsOpen="False"
+            IsClosable="True" />
+
+        <!-- ======== Row 2：内容区 ======== -->
+        <ScrollView Grid.Row="2" Margin="0,16,0,0" VerticalScrollBarVisibility="Auto">
+            <StackPanel Spacing="8" MaxWidth="1000" HorizontalAlignment="Left">
+
+                <TextBlock
+                    Style="{StaticResource BodyTextBlockStyle}"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    TextWrapping="Wrap"
+                    Text="本页采用即时保存：开关与单选项改动后立即写入并生效；文本类设置在你离开输入框或按 Enter 时立即写入。因此本页没有「保存」按钮。" />
+
+                <Expander Header="外观" IsExpanded="True" HorizontalAlignment="Stretch">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="主题" Style="{StaticResource SettingsRowTitleStyle}" />
+                        <RadioButtons x:Name="ThemeRadios" MaxColumns="2" SelectionChanged="OnThemeSelectionChanged">
+                            <x:String>深色</x:String>
+                            <x:String>浅色</x:String>
+                        </RadioButtons>
+                        <TextBlock
+                            Style="{StaticResource SettingsRowMetaTertiaryStyle}"
+                            TextWrapping="Wrap"
+                            Text="当前版本的主题只能选「深色」或「浅色」，不跟随系统设置 —— 启动器配置里的 theme 字段只有这两个取值（契约缺口，已登记）。" />
+                    </StackPanel>
+                </Expander>
+
+                <Expander Header="存储位置" IsExpanded="True" HorizontalAlignment="Stretch">
+                    <StackPanel Spacing="8">
+                        <TextBox
+                            x:Name="PrimaryHomeBox"
+                            Header="主 home（凭证继承的源）"
+                            PlaceholderText="例如：C:\Users\你\.dsh"
+                            LostFocus="OnPrimaryHomeLostFocus"
+                            KeyDown="OnTextBoxKeyDown" />
+                        <TextBlock
+                            Style="{StaticResource SettingsRowMetaTertiaryStyle}"
+                            TextWrapping="Wrap"
+                            Text="必须是绝对路径。把某个实例的凭证策略设为「继承主 home」时，它就会读写这里的登录凭证。" />
+                        <TextBlock
+                            Style="{StaticResource SettingsRowMetaTertiaryStyle}"
+                            TextWrapping="Wrap"
+                            Text="当前没有可用的系统目录选择器通道，因此这里只能手工输入路径。" />
+
+                        <TextBox
+                            x:Name="RootDirBox"
+                            Header="启动器根目录（只读）"
+                            IsReadOnly="True" />
+                        <TextBlock
+                            Style="{StaticResource SettingsRowMetaTertiaryStyle}"
+                            TextWrapping="Wrap"
+                            Text="实例、引擎、日志、缓存与共享资源都在这个目录下（instances / engines / logs / cache / shared）。" />
+                    </StackPanel>
+                </Expander>
+
+                <Expander Header="引擎与网络" IsExpanded="True" HorizontalAlignment="Stretch">
+                    <StackPanel Spacing="8">
+                        <TextBox
+                            x:Name="RegistryBox"
+                            Header="npm registry"
+                            PlaceholderText="https://registry.npmjs.org/"
+                            LostFocus="OnRegistryLostFocus"
+                            KeyDown="OnTextBoxKeyDown" />
+                        <TextBlock
+                            Style="{StaticResource SettingsRowMetaTertiaryStyle}"
+                            TextWrapping="Wrap"
+                            Text="用于查询可安装的 dsh 引擎版本。改完之后不会自动去查一次 —— 避免在这个页面上产生网络副作用；到「引擎版本管理」里点刷新即可用上新地址。" />
+
+                        <TextBox
+                            x:Name="NodePathBox"
+                            Header="Node 可执行文件路径"
+                            PlaceholderText="留空 = 自动探测"
+                            LostFocus="OnNodePathLostFocus"
+                            KeyDown="OnTextBoxKeyDown" />
+                        <TextBlock
+                            Style="{StaticResource SettingsRowMetaTertiaryStyle}"
+                            TextWrapping="Wrap"
+                            Text="必须是绝对路径，且指向真实存在的 node 可执行文件。dsh 依赖的原生模块拒绝 Electron 内置运行时，所以这里必须填独立的 Node.js。留空表示按「环境变量 → 本页配置 → 启动器自身 → 系统 PATH → 常见安装位置」的顺序自动探测。" />
+                    </StackPanel>
+                </Expander>
+
+                <Expander Header="Node 运行时" IsExpanded="True" HorizontalAlignment="Stretch">
+                    <StackPanel Spacing="8">
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <!-- 纯装饰图标：从无障碍树里摘掉，结论文字已经表达了全部信息（规范 §8.1） -->
+                            <SymbolIcon x:Name="NodeOkIcon" Grid.Column="0" Symbol="Accept" Foreground="{ThemeResource SystemFillColorSuccessBrush}" VerticalAlignment="Top" Visibility="Collapsed" AutomationProperties.AccessibilityView="Raw" />
+                            <SymbolIcon x:Name="NodeFailIcon" Grid.Column="0" Symbol="Important" Foreground="{ThemeResource SystemFillColorCriticalBrush}" VerticalAlignment="Top" Visibility="Collapsed" AutomationProperties.AccessibilityView="Raw" />
+                            <TextBlock
+                                x:Name="NodeConclusionText"
+                                Grid.Column="1"
+                                Style="{StaticResource SettingsRowBodyStyle}"
+                                TextWrapping="Wrap"
+                                Text="尚未探测。" />
+                        </Grid>
+
+                        <Grid ColumnSpacing="16" RowSpacing="4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="当前使用" Style="{StaticResource SettingsRowMetaTertiaryStyle}" />
+                            <TextBlock x:Name="NodeActiveFileText" Grid.Row="0" Grid.Column="1" Style="{StaticResource SettingsRowMetaStyle}" TextWrapping="Wrap" Text="—" />
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="版本" Style="{StaticResource SettingsRowMetaTertiaryStyle}" />
+                            <TextBlock x:Name="NodeActiveVersionText" Grid.Row="1" Grid.Column="1" Style="{StaticResource SettingsRowMetaStyle}" TextWrapping="Wrap" Text="—" />
+
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="来源" Style="{StaticResource SettingsRowMetaTertiaryStyle}" />
+                            <TextBlock x:Name="NodeActiveSourceText" Grid.Row="2" Grid.Column="1" Style="{StaticResource SettingsRowMetaStyle}" TextWrapping="Wrap" Text="—" />
+                        </Grid>
+
+                        <InfoBar
+                            x:Name="NodeAdviceBar"
+                            IsOpen="False"
+                            IsClosable="False"
+                            Severity="Warning"
+                            Title="没有找到可用的 Node 运行时"
+                            Message="在上面的「Node 可执行文件路径」里手工指定一个 node.exe（绝对路径），或安装 Node.js 20 及以上版本后点「重新探测 Node」。务必不要指向 Electron 自带的运行时。" />
+
+                        <TextBlock Text="探测到的候选（顺序即解析优先级）" Style="{StaticResource SettingsRowTitleStyle}" />
+                        <ListView
+                            x:Name="CandidateList"
+                            SelectionMode="None"
+                            MaxHeight="320" />
+                        <TextBlock
+                            x:Name="CandidateEmptyText"
+                            Style="{StaticResource SettingsRowBodyStyle}"
+                            TextWrapping="Wrap"
+                            Visibility="Collapsed"
+                            Text="没有探测到任何候选运行时。" />
+                        <TextBlock
+                            Style="{StaticResource SettingsRowMetaTertiaryStyle}"
+                            TextWrapping="Wrap"
+                            Text="探测是做实跑验证而不是按路径名猜测：每个候选都会真正执行一次 node 探针，因此「不可用」后面给出的原因就是它真实失败的原因。" />
+                    </StackPanel>
+                </Expander>
+
+                <Expander Header="危险操作" IsExpanded="False" HorizontalAlignment="Stretch">
+                    <StackPanel Spacing="8">
+                        <ToggleSwitch
+                            x:Name="ConfirmDeleteSwitch"
+                            Header="删除实例前二次确认"
+                            OnContent="需要确认"
+                            OffContent="直接删除"
+                            Toggled="OnConfirmDeleteToggled" />
+                        <TextBlock
+                            Style="{StaticResource SettingsRowMetaTertiaryStyle}"
+                            TextWrapping="Wrap"
+                            Text="关闭后，删除实例会立即执行且不再弹确认框（删除仍然可以选择是否连同文件一起删）。" />
+                    </StackPanel>
+                </Expander>
+
+                <TextBlock
+                    x:Name="VersionText"
+                    Margin="0,8,0,0"
+                    Style="{StaticResource SettingsRowMetaTertiaryStyle}"
+                    TextWrapping="Wrap"
+                    Text="" />
+            </StackPanel>
+        </ScrollView>
+    </Grid>
+</Page>

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    应用内轻提示宿主（视觉规范 §9.10.2）。
+
+    官方 microsoft-ui-xaml 中**没有**应用内 Toast 控件（controls/dev 76 项内无 Toast/Notification），
+    规范因此自定本方案：用 InfoBar 变体叠在外壳顶层。
+    刻意**不用**系统 AppNotificationManager —— 那需要 COM 激活注册（ToastActivatorCLSID）+ Register()，
+    成本与"已复制"这类一级反馈严重不匹配，且提示会跑到应用窗口之外。
+
+    容器本身不拦截点击（IsHitTestVisible=False），只有每条提示可交互。
+-->
+<UserControl
+    x:Class="WhalesLauncher.Controls.ToastHost"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <StackPanel x:Name="ItemsPanel" Spacing="8" MaxWidth="420" IsHitTestVisible="False" />
+</UserControl>

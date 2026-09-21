@@ -54,6 +54,17 @@
 #     /.spike/smoke/node_modules/
 #   并同时修正脚本内的 F:\WhalesLauncher 硬编码路径。
 /.spike/
+# .probe/ 为重构期探针/取证工作区（mux 取证语料、构建冒烟工程等），不入库。
+/.probe/
+
+# ------------------------------------------- WinUI 3 (desktop/) 构建产物
+# 同样锚定根目录，避免误伤同名目录。
+/desktop/**/bin/
+/desktop/**/obj/
+/desktop/**/AppPackages/
+/desktop/**/*.appx
+/desktop/**/*.msix
+/artifacts/
 
 # ------------------------------------------------------------ 日志与临时文件
 *.log

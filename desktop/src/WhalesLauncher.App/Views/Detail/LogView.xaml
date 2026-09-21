@@ -1,0 +1,167 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    可复用日志视图（视觉规范 §9.6 的 Row2「LogView」）。
+
+    这一份同时被 **P5 日志页** 与 **外壳右侧日志抽屉**（§9.1）复用，因此它刻意：
+      · 不引用任何页面级资源、不依赖 AppServices、不自己订阅桥接事件
+        （订阅与分发是调用方的事，否则两处各订阅一次会重复渲染）；
+      · 自带空态 / 截断提示 / 状态条，宿主只需提供工具条；
+      · 外露 API 见 LogView.xaml.cs 顶部注释。
+
+    性能结构（规范 §9.6「洪峰不卡死的硬性实现要求」）：
+      · ListView + ItemsStackPanel（虚拟化 + 回收），**不放进 StackPanel、不设固定高度**；
+      · 环形裁剪由调用方 Append 时批量执行，只追加不重建；
+      · 过滤只改绑定集合，不重建行对象。
+-->
+<UserControl
+    x:Class="WhalesLauncher.Views.Detail.LogView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:muxc="using:Microsoft.UI.Xaml.Controls"
+    xmlns:detail="using:WhalesLauncher.Views.Detail">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- 被截断常驻提示：规范 §9.6 要求 Severity=Informational 且 IsClosable=False -->
+        <muxc:InfoBar
+            x:Name="TruncatedBar"
+            Grid.Row="0"
+            Margin="0,0,0,8"
+            Severity="Informational"
+            IsClosable="False"
+            IsOpen="False"
+            Title="较早日志已截断" />
+
+        <Grid Grid.Row="1">
+            <ListView
+                x:Name="LogList"
+                ItemsSource="{x:Bind Rows, Mode=OneWay}"
+                SelectionMode="Extended"
+                IsItemClickEnabled="False"
+                Loaded="OnLoaded">
+                <ListView.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <!-- KeepLastItemInView：仅在跟随开关打开时生效，与下面的跟随判定配套 -->
+                        <ItemsStackPanel
+                            Orientation="Vertical"
+                            ItemsUpdatingScrollMode="KeepLastItemInView" />
+                    </ItemsPanelTemplate>
+                </ListView.ItemsPanel>
+
+                <ListView.ItemContainerStyle>
+                    <Style TargetType="ListViewItem">
+                        <Setter Property="Padding" Value="8,0,8,0" />
+                        <Setter Property="MinHeight" Value="0" />
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                    </Style>
+                </ListView.ItemContainerStyle>
+
+                <ListView.ItemTemplate>
+                    <DataTemplate x:DataType="detail:LogRow">
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <!--
+                                「形 + 色」通道：2 epx 色条。stdout 中性、stderr 危险色、system 强调色。
+
+                                ⚠️ 这里刻意**不写** VerticalAlignment="Stretch"：
+                                实测该属性与 Width + Fill 组合出现在 DataTemplate 里时，
+                                `MainWindow.InitializeComponent()`（外壳抽屉里 XAML 解析本控件）会抛
+                                XamlParseException「Cannot create instance of type '…LogView'」，
+                                进程直接 0xC000027B 崩溃、应用活不过启动。改成固定 Height 后正常。
+                                色条高度因此是固定值，不随超长换行行自动拉长（视觉上仍能一眼分辨流来源）。
+                            -->
+                            <Rectangle
+                                Grid.Column="0"
+                                Width="2"
+                                Height="20"
+                                VerticalAlignment="Top"
+                                AutomationProperties.AccessibilityView="Raw"
+                                Fill="{x:Bind Fill, Mode=OneTime}" />
+
+                            <!-- 「字」通道之一：流标签（stdout 留空以减少噪声） -->
+                            <TextBlock
+                                Grid.Column="1"
+                                Width="56"
+                                VerticalAlignment="Top"
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Foreground="{x:Bind LabelBrush, Mode=OneTime}"
+                                Text="{x:Bind StreamLabel, Mode=OneTime}"
+                                TextTrimming="CharacterEllipsis" />
+
+                            <TextBlock
+                                Grid.Column="2"
+                                Width="64"
+                                VerticalAlignment="Top"
+                                AutomationProperties.AccessibilityView="Raw"
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                FontFamily="Cascadia Mono, Consolas, monospace"
+                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                Text="{x:Bind TimeText, Mode=OneTime}" />
+
+                            <!-- 「字」通道之二：正文前缀（stderr 用 "! "、system 用 "· "） -->
+                            <TextBlock
+                                Grid.Column="3"
+                                VerticalAlignment="Top"
+                                FontFamily="Cascadia Mono, Consolas, monospace"
+                                Foreground="{x:Bind BodyBrush, Mode=OneTime}"
+                                IsTextSelectionEnabled="True"
+                                Text="{x:Bind StreamText, Mode=OneTime}"
+                                TextWrapping="Wrap" />
+                        </Grid>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+
+            <!-- 空态（规范 §6.6 自绘空态块；文案可由宿主用 EmptyHint 覆盖） -->
+            <StackPanel
+                x:Name="EmptyState"
+                MaxWidth="320"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Spacing="8">
+                <FontIcon
+                    HorizontalAlignment="Center"
+                    AutomationProperties.AccessibilityView="Raw"
+                    FontSize="24"
+                    Glyph="&#xE9D9;" />
+                <TextBlock
+                    HorizontalAlignment="Center"
+                    Style="{StaticResource BodyLargeStrongTextBlockStyle}"
+                    Text="暂无日志" />
+                <TextBlock
+                    x:Name="EmptyHintText"
+                    HorizontalAlignment="Center"
+                    Style="{StaticResource BodyTextBlockStyle}"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Text="启动实例后将在此显示"
+                    TextAlignment="Center"
+                    TextWrapping="Wrap" />
+            </StackPanel>
+        </Grid>
+
+        <!--
+            「回到底部」：仅在用户主动上滚暂停跟随时出现（规范 §9.6「跟随判定」）。
+            用 MinHeight 而非 Height，避免文本放大时把文字裁掉（规范 §8.3 硬性规则）。
+        -->
+        <Button
+            x:Name="JumpToBottomButton"
+            Grid.Row="1"
+            Margin="0,0,16,16"
+            HorizontalAlignment="Right"
+            VerticalAlignment="Bottom"
+            AutomationProperties.Name="回到日志底部"
+            Click="OnJumpToBottomClick"
+            Content="回到底部"
+            Visibility="Collapsed" />
+    </Grid>
+</UserControl>

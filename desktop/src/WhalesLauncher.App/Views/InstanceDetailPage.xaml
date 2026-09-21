@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    P2–P5 的宿主：实例详情外壳 + 4 个标签页（视觉规范 §9.0 通用骨架 + §6.3 页签选型）。
+
+    页签用 SelectorBar 而不是 TabView：规范 §6.3 明确本项目**不使用** TabView ——
+    4 个详情页签是固定集合，TabView 的关闭/拖出语义会造成数据丢失风险（切页即丢编辑态）。
+    这里的 4 个子视图因此常驻可视树、只切 Visibility，滚动位置与编辑态都得以保留。
+-->
+<Page
+    x:Class="WhalesLauncher.Views.InstanceDetailPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:muxc="using:Microsoft.UI.Xaml.Controls"
+    xmlns:controls="using:WhalesLauncher.Controls"
+    xmlns:detail="using:WhalesLauncher.Views.Detail">
+
+    <Page.KeyboardAccelerators>
+        <KeyboardAccelerator
+            Key="Left"
+            Modifiers="Menu"
+            Invoked="OnBackAccelerator" />
+    </Page.KeyboardAccelerators>
+
+    <Grid x:Name="PageRoot" Padding="24" RowSpacing="8" SizeChanged="OnPageRootSizeChanged">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- Row0：页头（统一控件，规范 §9.0 硬性要求） -->
+        <controls:PageHeader x:Name="Header" Grid.Row="0">
+            <controls:PageHeader.Actions>
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button
+                        x:Name="BackButton"
+                        AutomationProperties.Name="返回实例列表"
+                        Click="OnBackClick"
+                        Content="返回" />
+                    <Button
+                        x:Name="OpenFolderButton"
+                        AutomationProperties.Name="在资源管理器中打开实例目录"
+                        Click="OnOpenFolderClick"
+                        Content="打开文件夹" />
+                    <Button
+                        x:Name="OpenUiButton"
+                        AutomationProperties.Name="在浏览器中打开实例界面"
+                        Click="OnOpenUiClick"
+                        Content="打开界面"
+                        Visibility="Collapsed" />
+                    <Button
+                        x:Name="PrimaryActionButton"
+                        AutomationProperties.Name="启动或停止实例"
+                        Click="OnPrimaryActionClick"
+                        Style="{StaticResource AccentButtonStyle}">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <muxc:ProgressRing
+                                x:Name="ActionRing"
+                                Width="20"
+                                Height="20"
+                                IsActive="False"
+                                Visibility="Collapsed" />
+                            <TextBlock x:Name="PrimaryActionText" Text="启动" />
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </controls:PageHeader.Actions>
+        </controls:PageHeader>
+
+        <!-- Row1：状态提示区（降级 / 错误 / 崩溃原因） -->
+        <StackPanel Grid.Row="1" Spacing="8">
+            <muxc:InfoBar
+                x:Name="ProblemBar"
+                Severity="Warning"
+                IsClosable="False"
+                IsOpen="False" />
+            <muxc:InfoBar
+                x:Name="ErrorBar"
+                Severity="Error"
+                IsClosable="True"
+                IsOpen="False" />
+        </StackPanel>
+
+        <!-- Row2：页签（固定 4 项） -->
+        <muxc:SelectorBar
+            x:Name="TabBar"
+            Grid.Row="2"
+            SelectionChanged="OnTabChanged" />
+
+        <!-- Row3：内容区 -->
+        <Grid Grid.Row="3">
+            <Grid x:Name="TabHost" />
+
+            <!-- 实例不存在（被外部删除）时的空态：不能白屏（规范 §6.6 自绘空态块） -->
+            <StackPanel
+                x:Name="MissingState"
+                MaxWidth="360"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Spacing="8"
+                Visibility="Collapsed">
+                <FontIcon
+                    HorizontalAlignment="Center"
+                    AutomationProperties.AccessibilityView="Raw"
+                    FontSize="32"
+                    Glyph="&#xE783;" />
+                <TextBlock
+                    HorizontalAlignment="Center"
+                    Style="{StaticResource BodyLargeStrongTextBlockStyle}"
+                    Text="实例不存在" />
+                <TextBlock
+                    x:Name="MissingText"
+                    HorizontalAlignment="Center"
+                    Style="{StaticResource BodyTextBlockStyle}"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    TextAlignment="Center"
+                    TextWrapping="Wrap" />
+                <StackPanel
+                    HorizontalAlignment="Center"
+                    Orientation="Horizontal"
+                    Spacing="8">
+                    <Button
+                        AutomationProperties.Name="刷新实例列表"
+                        Click="OnRetryMissingClick"
+                        Content="刷新列表" />
+                    <Button
+                        AutomationProperties.Name="返回实例列表"
+                        Click="OnBackClick"
+                        Content="返回实例列表"
+                        Style="{StaticResource AccentButtonStyle}" />
+                </StackPanel>
+            </StackPanel>
+        </Grid>
+
+        <!-- Row4：状态条（规范 §9.0 可选 Row3） -->
+        <TextBlock
+            x:Name="StatusText"
+            Grid.Row="4"
+            Style="{StaticResource CaptionTextBlockStyle}"
+            Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+            TextWrapping="Wrap" />
+    </Grid>
+</Page>

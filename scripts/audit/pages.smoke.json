@@ -1,0 +1,30 @@
+{
+  "schema": "whaleslauncher.audit.pages/1",
+  "description": "Self-test config for the audit infrastructure. The subject is the Lead's WinUI 3 toolchain smoke app (.probe/winui3-smoke), which renders ONE page, so both entries point at the same view with different navigation steps. This validates the whole chain: launch once per theme, reuse the process across pages, multi-step capture, Light/Dark system theme override, PNG + UIA evidence, criteria evaluation. It is NOT a per-page audit of the real product.",
+  "exe": "F:\\WhalesLauncher\\.probe\\winui3-smoke\\bin\\Debug\\net10.0-windows10.0.26100.0\\win-x64\\WhalesLauncher.Smoke.exe",
+  "exeArgs": "",
+  "workDir": "",
+  "windowTitleLike": "WhalesLauncher",
+  "pages": [
+    {
+      "slug": "smoke-baseline",
+      "title": "Smoke app - render baseline",
+      "route": "probe",
+      "steps": [
+        { "Type": "wait", "Ms": 1000 }
+      ]
+    },
+    {
+      "slug": "smoke-expander",
+      "title": "Smoke app - after keyboard navigation",
+      "route": "probe",
+      "steps": [
+        { "Type": "wait", "Ms": 400 },
+        { "Type": "key", "Chord": "Tab" },
+        { "Type": "wait", "Ms": 300 },
+        { "Type": "key", "Chord": "Tab" },
+        { "Type": "wait", "Ms": 500 }
+      ]
+    }
+  ]
+}
