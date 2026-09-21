@@ -112,6 +112,11 @@ public partial class App : Application
 
     private async void OnMainWindowClosed(object sender, WindowEventArgs args)
     {
+        // 诊断：WinUI 3 在最后一个窗口关闭时退出进程。若退出不是用户点的，
+        // 这条记录能立刻区分"程序化关窗"与"原生崩溃"（后者不会有这条）。
+        WriteCrashLog(new InvalidOperationException(
+            "DIAG OnMainWindowClosed：窗口已关闭，应用即将退出。若用户未主动关闭，则为程序化关窗。"));
+
         if (_bridge is null)
         {
             return;

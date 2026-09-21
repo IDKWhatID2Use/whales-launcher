@@ -96,6 +96,128 @@ public sealed partial class MainWindow : Window
 
         // 首屏：实例列表（§9.1「无实例」时的空态由该页负责）
         _navigation.Navigate(RouteKeys.Instances);
+
+        // 审计深链：设 WHALES_SMOKE_ROUTE 可让应用直接进入指定页面。
+        // 目的：让「逐页视觉审计」能无人值守地截到任意页面 —— 此前 P4 存档页
+        // 因 SelectorBar 不响应合成鼠标点击而拿不到截图（见交付报告 §5.1 L1）。
+        // 形如：instances | engines | create | settings | detail/first/saves
+        ApplySmokeRoute();
+    }
+
+    /// <summary>
+    /// 读取 <c>WHALES_SMOKE_ROUTE</c> 并导航（仅用于 QA / 自动化截图，未设该变量时是空操作）。
+    ///
+    /// 支持的取值：<c>instances</c> / <c>engines</c> / <c>create</c> / <c>settings</c> /
+    /// <c>detail/first/&lt;tab&gt;</c>（<c>first</c> 表示左栏第一个实例，避免脚本硬编码实例 id）。
+    /// 任何无法识别或无法完成的取值都静默保持首屏，绝不影响正常启动。
+    ///
+    /// <b>为什么要等</b>：本方法在外壳构造末尾调用，而外壳是"先建窗口、后装后端"
+    /// （<c>App.xaml.cs</c>），此时实例列表还没装载，<c>detail/first</c> 取不到 id。
+    /// 因此对依赖数据的取值做一次短轮询，等就绪后再导航。
+    /// </summary>
+    private void ApplySmokeRoute()
+    {
+        var raw = Environment.GetEnvironmentVariable("WHALES_SMOKE_ROUTE");
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return;
+        }
+
+        var needsData = raw.StartsWith("detail/first", StringComparison.OrdinalIgnoreCase);
+        if (!needsData || AppServices.IsReady)
+        {
+            NavigateSmokeRoute(raw);
+            return;
+        }
+
+        // 等后端装配完成（最多 30 秒），就绪后导航一次
+        var tries = 0;
+        var queue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+        if (queue is null)
+        {
+            return;
+        }
+
+        var timer = queue.CreateTimer();
+        timer.Interval = TimeSpan.FromMilliseconds(300);
+        timer.IsRepeating = true;
+        timer.Tick += (_, _) =>
+        {
+            tries += 1;
+            if (AppServices.IsReady)
+            {
+                timer.Stop();
+                NavigateSmokeRoute(raw);
+            }
+            else if (tries > 100)
+            {
+                timer.Stop();
+            }
+        };
+        timer.Start();
+    }
+
+    /// <summary>执行深链导航（取值见 <see cref="ApplySmokeRoute"/>）。</summary>
+    private void NavigateSmokeRoute(string raw)
+    {
+        try
+        {
+            var parts = raw.Split('/', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 0)
+            {
+                return;
+            }
+
+            switch (parts[0].ToLowerInvariant())
+            {
+                case "detail" when parts.Length >= 2:
+                    var id = parts[1];
+                    if (string.Equals(id, "first", StringComparison.OrdinalIgnoreCase))
+                    {
+                        id = AppServices.IsReady ? FirstInstanceId() : string.Empty;
+                    }
+
+                    if (!string.IsNullOrEmpty(id))
+                    {
+                        _navigation.NavigateToDetail(id, parts.Length >= 3 ? parts[2] : DetailTabs.Plugins);
+                    }
+
+                    break;
+
+                case "engines":
+                    _navigation.Navigate(RouteKeys.Engines);
+                    break;
+
+                case "create":
+                    _navigation.Navigate(RouteKeys.Create);
+                    break;
+
+                case "settings":
+                    _navigation.Navigate(RouteKeys.Settings);
+                    break;
+
+                default:
+                    break;
+            }
+        }
+        catch
+        {
+            // QA 深链失败不应影响正常启动
+        }
+    }
+
+    /// <summary>取左栏第一个实例的稳定 id（深链 <c>detail/first/...</c> 用）。</summary>
+    private static string FirstInstanceId()
+    {
+        foreach (var item in AppServices.State.Instances)
+        {
+            if (item.Meta is { } meta && !string.IsNullOrEmpty(meta.Id))
+            {
+                return meta.Id;
+            }
+        }
+
+        return string.Empty;
     }
 
     /* ------------------------------------------------------------------ *

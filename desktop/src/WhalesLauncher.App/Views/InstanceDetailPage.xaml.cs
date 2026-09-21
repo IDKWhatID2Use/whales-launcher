@@ -33,6 +33,16 @@ public sealed partial class InstanceDetailPage : Page
     private InstanceRuntime? _runtime;
     private string _instanceId = string.Empty;
     private string _currentTab = DetailTabs.Plugins;
+
+    /// <summary>
+    /// 标签切换的「就绪门闩」。
+    ///
+    /// 为什么需要：XAML 里第一个 <c>SelectorBarItem</c> 带 <c>IsSelected="True"</c>（插件），
+    /// 它的 <c>SelectionChanged</c> 会**异步**派发，时机晚于 <c>OnNavigatedTo</c> 里的
+    /// <see cref="UpdateTabSelection"/>，于是把 <c>_currentTab</c> 覆盖回「插件」——
+    /// 表现为**带参数进入详情页（深链 / 从列表点「详情」指定页签）时内容区停在插件页**。
+    /// 装载完成前一律忽略标签事件，装载完成后再放行用户操作。
+    /// </summary>
     private bool _tabsReady;
     private bool _suppressTabEvents;
     private bool _subscriptionsAttached;
@@ -76,6 +86,9 @@ public sealed partial class InstanceDetailPage : Page
     protected override void OnNavigatedFrom(NavigationEventArgs e)
     {
         base.OnNavigatedFrom(e);
+
+        // 离开后重新落下门闩：下次进入时仍要先完成装载再接受标签事件
+        _tabsReady = false;
 
         // 简报 §4.9 硬性要求：离开页面必须解绑，否则桥接/状态层会一直持有本页
         DetachSubscriptions();
@@ -128,6 +141,9 @@ public sealed partial class InstanceDetailPage : Page
         Render();
         UpdateTabSelection();
         await LoadCurrentTabAsync();
+
+        // 装载完成，放行标签事件（见 _tabsReady 的说明）
+        _tabsReady = true;
     }
 
     /* ------------------------------------------------------------------ *
@@ -200,11 +216,26 @@ public sealed partial class InstanceDetailPage : Page
         _tabsReady = true;
     }
 
+    /// <summary>
+    /// 把选中项切到 <see cref="_currentTab"/>，**并同步一次可见性**。
+    ///
+    /// 为什么必须在这里也设一次 <c>Visibility</c>：<c>SelectorBar</c> 在"选中项本来就是它"时
+    /// **不会**触发 <c>SelectionChanged</c>。装载路径上 `_currentTab` 初始值就是 <c>plugins</c>，
+    /// 而 <see cref="BuildTabBar"/> 也已把第一项设为 <c>IsSelected = true</c>，于是事件永远不会来 ——
+    /// 只靠事件驱动可见性会让 4 个子视图全部停在 <c>Collapsed</c>，
+    /// 表现为"页头与页签都在、内容区一片空白"（实测截图确认）。
+    /// 把可见性收敛到本方法后，无论事件来不来，装载后都有且只有一个视图可见。
+    /// </summary>
     private void UpdateTabSelection()
     {
         _suppressTabEvents = true;
         try
         {
+            foreach (var entry in _tabs)
+            {
+                entry.View.Visibility = entry.Key == _currentTab ? Visibility.Visible : Visibility.Collapsed;
+            }
+
             foreach (var item in TabBar.Items)
             {
                 if (item is SelectorBarItem barItem && barItem.Tag as string == _currentTab)
@@ -222,7 +253,9 @@ public sealed partial class InstanceDetailPage : Page
 
     private async void OnTabChanged(SelectorBar sender, SelectorBarSelectionChangedEventArgs args)
     {
-        if (_suppressTabEvents || sender.SelectedItem is not SelectorBarItem { Tag: string tab })
+        // 装载完成前的标签事件一律忽略（含 XAML 默认 IsSelected 的异步派发），
+        // 否则它会把 _currentTab 覆盖回「插件」，让带参数导航的页签失效。
+        if (!_tabsReady || _suppressTabEvents || sender.SelectedItem is not SelectorBarItem { Tag: string tab })
         {
             return;
         }

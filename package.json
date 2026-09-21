@@ -2,25 +2,19 @@
   "name": "whales-launcher",
   "version": "1.0.0",
   "private": true,
-  "description": "WhalesLauncher —— DeepSeek Harness (dsh) 的实例与版本管理启动器",
+  "description": "WhalesLauncher —— DeepSeek Harness (dsh) 的实例与版本管理启动器（WinUI 3 前端 + Node 侧车业务引擎）",
   "type": "module",
-  "main": "dist/main/index.cjs",
   "scripts": {
-    "build": "node scripts/build.mjs",
-    "postinstall": "node scripts/setup-electron.mjs",
-    "setup:electron": "node scripts/setup-electron.mjs",
-    "launch": "node scripts/launch.mjs",
-    "start": "node scripts/launch.mjs --rebuild",
+    "build:bridge": "node scripts/build-bridge.mjs",
+    "build:app": "powershell -NoProfile -ExecutionPolicy Bypass -File desktop/build-app.ps1",
+    "build": "npm run build:bridge && npm run build:app",
     "icon": "node scripts/make-icon.mjs",
-    "shots:tutorial": "node scripts/make-tutorial-shots.mjs",
     "shortcut": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/make-shortcut.ps1",
-    "rec": "node scripts/record/record.mjs",
-    "rec:setup": "node scripts/record/record.mjs setup",
-    "rec:guide": "node scripts/record/record.mjs guide",
-    "rec:check": "node scripts/record/record.mjs check",
     "typecheck": "node node_modules/typescript/bin/tsc --noEmit",
     "test": "node --test --test-isolation=none \"tests/**/*.test.mjs\"",
     "test:core": "node --test --test-isolation=none \"tests/core/*.test.mjs\"",
+    "smoke:bridge": "node scripts/audit/bridge-smoke.mjs",
+    "audit:visual": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/audit/audit-visual.ps1",
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\""
   },
   "dependencies": {
@@ -32,7 +26,6 @@
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.10.2",
     "esbuild": "^0.24.2",
-    "electron": "41.1.0",
     "typescript": "^5.7.2"
   }
 }
