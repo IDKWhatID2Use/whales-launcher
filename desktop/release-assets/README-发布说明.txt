@@ -24,23 +24,36 @@ WhalesLauncher —— 使用说明
 ------------------------------------------------------------
 
   * Windows 10 1809（10.0.17763）及以上，64 位
-  * Node.js 22 或更高版本  ← **这一项必须自行安装**
+  * Node.js —— **不需要你预装**
 
 关于 Node.js 的说明（重要）：
 
   WhalesLauncher 是一个启动器。它自己的界面不需要 Node，
-  但要**管理 dsh 实例**就必须有一个真正的 Node.js：
+  但整套业务逻辑跑在 Node 侧车进程里，所以要管理 dsh 实例，
+  这台机器上就必须有一个**真正的** Node.js 可用。
 
-      https://nodejs.org/
+  好消息是：**一个都没有时它会自己去取。**
 
-  程序启动时会自动探测 Node，顺序为：
+  首次启动会自动跑一次环境与依赖自检。若发现本机没有任何可用的
+  Node，它会问一次，然后自动下载官方 Node v22 LTS 便携版
+  （约 30MB，校验官方公布的 SHA-256），解压到：
+
+      <本目录>\runtime\node\
+
+  这样做的理由：不需要管理员权限（MSI 装到 Program Files 会弹
+  UAC）、不污染系统（不动注册表、不改系统 PATH、删掉目录即彻底
+  移除），而且包里自带 npm，所以"装了 Node 却没有 npm"的坑也
+  一并消失。官方源不可达时会回退到 npmmirror 的 Node 二进制镜像，
+  两个源都取官方摘要做校验，不存在"为了走镜像就跳过校验"的路径。
+
+  如果你自己装过 Node，它会**优先沿用你的**，探测顺序为：
 
       $WHALES_NODE_PATH  →  配置里的 nodePath  →  系统 PATH
                          →  常见安装位置（nvm-windows / Volta / fnm 等）
 
   每个候选都会**实际执行一次探针**验证，绝不按路径名猜测。
-  如果没探到，界面仍然能打开，但会明确提示"后端未就绪"，
-  并且可以在「全局设置 → Node 运行时」里手动指定 node.exe。
+  也可以随时在「全局设置 → Node 运行时」里手动指定 node.exe。
+  （自备的便携版排在上述来源**之后**：你自己装的永远优先。）
 
   注意：请**不要**用非官方 Node 运行时（如某些软件内置的 Node）去跑 dsh ——
   dsh 的原生模块按运行时指纹白名单匹配，非官方指纹会直接启动失败
@@ -57,6 +70,7 @@ WhalesLauncher —— 使用说明
   engines/        下载的引擎版本
   logs/           运行日志
   cache/          端口台账等缓存
+  runtime/node/   自备的 Node 运行时（**只有在本机一个 Node 都没有时**才会出现）
 
 想换位置：设置环境变量  WHALES_LAUNCHER_ROOT 指向目标目录即可
 （例如放到 D:\WhalesData 这种不属于程序目录的地方，便于升级时保留数据）。
@@ -68,12 +82,12 @@ WhalesLauncher —— 使用说明
 四、入门
 ------------------------------------------------------------
 
-  1. 装好 Node.js 22+
-  2. 双击 WhalesLauncher.exe
-  3. 左栏底部「引擎版本管理」→ 安装一个 dsh 引擎版本
-     （需要联网，从 npm registry 拉取）
-  4. 「新建实例」→ 四步向导（名称与外观 / 引擎版本 / profile 模板 / 隔离策略）
-  5. 回到实例列表，点「启动」
+  1. 双击 WhalesLauncher.exe
+     （首次启动会跑环境自检；缺 Node 或引擎时会问你一次，然后自动装好）
+  2. 左栏「引擎版本管理」→ 安装一个 dsh 引擎版本
+     （自检若已装好引擎，这一步可以跳过；手动安装需要联网，从 npm registry 拉取）
+  3. 「新建实例」→ 四步向导（名称与外观 / 引擎版本 / profile 模板 / 隔离策略）
+  4. 回到实例列表，点「启动」
 
 完整图文教程见仓库：
   https://github.com/IDKWhatID2Use/whales-launcher/blob/main/docs/guide/README.md
@@ -90,7 +104,9 @@ WhalesLauncher —— 使用说明
 常见情况：
 
   * 界面能开但没有数据
-    → 没探到 Node.js。见上文第二节，或到「全局设置 → Node 运行时」手动指定。
+    → 没探到 Node.js，而且自动获取也没成功（通常是网络不通）。
+      到「全局设置 → Node 运行时」看结论；也可以手动填一个 node.exe 的绝对路径，
+      或设环境变量 WHALES_NODE_PATH 后重启。
 
   * 实例启动失败，提示 node-addon-require-builtin unsupported
     → 用非官方 Node 运行时跑了 dsh。换成 nodejs.org 的官方版本。
