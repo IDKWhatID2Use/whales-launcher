@@ -26,6 +26,38 @@ public sealed class AppState
     /// <summary>实例列表。左栏与 P1 共享同一份集合。</summary>
     public ObservableCollection<InstanceSummary> Instances { get; } = new();
 
+    /// <summary>
+    /// 实例集合的变更计数（单调递增）。
+    ///
+    /// 为什么需要：<see cref="ApplyRuntime"/> 是**就地改写** <see cref="Instances"/> 里已有
+    /// 对象的 <c>Runtime</c> —— 变异之后，视图手里旧快照与新快照若是同一个对象，
+    /// 事后按引用比较恒等、按字段比较也恒等，**探测不到这次改动**（实例列表曾因此
+    /// 在推送帧后跳过卡片重建，状态停在「启动中」）。因此变更侧在此自报版本，
+    /// 视图用「版本变过没有」判断要不要重建。
+    ///
+    /// 只在 ApplyRuntime 实际应用一帧推送时递增：<c>instance:list</c> 的 ReplaceAll
+    /// 换的是**新对象**，按字段比较（InstancesPage 的 SameCards）天然能发现差异，无需计数。
+    /// </summary>
+    public long InstancesVersion { get; private set; }
+
+    /// <summary>
+    /// 供**绕过 <see cref="ApplyRuntime"/>** 的就地写入方（详情页 <c>RefreshRuntimeQuietAsync</c>
+    /// 直接改共享 InstanceSummary 的派生字段）自报变更：只递增版本，**不发事件**。
+    ///
+    /// 不递增的后果：列表页持有的旧快照就是被改的那个共享对象，重建判据
+    /// （引用比较恒等、字段比较恒等）会误判"没变"而跳过重建，卡片停在旧值。
+    ///
+    /// 为什么不发 <see cref="InstancesChanged"/>：① 与变异前的既有语义一致（原本就不发）；
+    /// ② 详情页自己也订阅了该事件，而它的 LoadAsync 在 _instance 赋值**之前**就会走
+    /// RefreshRuntimeQuietAsync —— 若此处广播，OnInstancesChanged 见 _instance 为 null
+    /// 会再次进入 LoadAsync，形成"变异 → 事件 → 重载 → 变异"的无界递归。
+    /// 列表页在下一次 Render（如 OnNavigatedTo 返回时）读版本号即可拾取本次变更。
+    /// </summary>
+    public void MarkInstancesMutated()
+    {
+        InstancesVersion += 1;
+    }
+
     /// <summary>引擎版本列表。</summary>
     public ObservableCollection<EngineInfo> Engines { get; } = new();
 
@@ -200,6 +232,7 @@ public sealed class AppState
             if (!RuntimeChanged(item.Runtime, runtime)) return;
 
             item.Runtime = runtime;
+            InstancesVersion += 1;
             InstancesChanged?.Invoke(this, EventArgs.Empty);
             return;
         }

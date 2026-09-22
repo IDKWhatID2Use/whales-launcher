@@ -825,6 +825,10 @@ public sealed partial class InstanceDetailPage : Page
         instance.PluginCount = fresh.PluginCount;
         instance.Problem = fresh.Problem;
 
+        // 就地改了共享对象必须自报版本：列表页的重建判据对"旧快照=已变异的同一个对象"
+        // 比较不出差异，不递增版本卡片会停在旧值（如装完插件仍显示旧依赖数）。
+        AppServices.State.MarkInstancesMutated();
+
         _runtime = instance.Runtime;
     }
 }

@@ -56,6 +56,18 @@ public sealed partial class InstancesPage : Page, System.ComponentModel.INotifyP
 
     private List<InstanceSummary> _all = new();
     private List<InstanceSummary> _visible = new();
+
+    /// <summary>
+    /// 上次重建卡片时的 <see cref="AppState.InstancesVersion"/>。
+    ///
+    /// 为什么版本比较是**必需的**、不能只靠 <see cref="CardDataEqual"/>：后端推送帧
+    /// （<c>log:state</c> → ApplyRuntime）会**就地变异** <see cref="_all"/> 里的共享对象，
+    /// 变异后旧快照与新快照是同一个实例 —— 引用比较恒等、字段比较也恒等，事后无从察觉。
+    /// 变更侧（AppState）在变异时递增版本，这里记下重建时的版本；
+    /// 版本不等 ⇒ 底层动过 ⇒ 即使比较结果"相等"也必须重建。
+    /// 反向（版本相等但字段不等）由 <see cref="SameCards"/> 兜住 —— instance:list 换新对象。
+    /// </summary>
+    private long _cardsVersion;
     private string _query = string.Empty;
     private string _status = "all";
     private string _sort = "recent";
@@ -203,8 +215,12 @@ public sealed partial class InstancesPage : Page, System.ComponentModel.INotifyP
         _loading = true;
 
         // 首次加载（无任何数据）用居中 ProgressRing；后续刷新用顶部 ProgressBar，不清空已有卡片。
+        //
+        // 网格的可见性**不在此处动**：曾有一行 `InstanceGrid.Visibility = Collapsed`，
+        // 请求返回后的 Render 才设回 Visible —— 而 4 秒轮询（OnWatchTick）每次都会走这里，
+        // 网格在整个桥接请求期间消失，表现为"实例卡片每 4 秒闪一下"。
+        // 首屏时网格本身就是 Collapsed（XAML 默认且 _cards 为空），Render 负责其后的一切切换。
         FirstLoadPanel.Visibility = _all.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-        InstanceGrid.Visibility = Visibility.Collapsed;
         RefreshBar.Visibility = showProgress ? Visibility.Visible : Visibility.Collapsed;
 
         try
@@ -334,6 +350,11 @@ public sealed partial class InstancesPage : Page, System.ComponentModel.INotifyP
             if (!string.Equals(card.LastLaunchedText, value, StringComparison.Ordinal))
             {
                 card.LastLaunchedText = value;
+
+                // 阅读器摘要尾部是同一段相对时间，跟着一起改（StateLabel 等其余部分
+                // 只在重建时变化，重建时会重算整串）。
+                card.MetaSummary =
+                    $"{card.Name}，{card.StateLabel}，{card.EngineVersion}，{card.PluginText}，{value}";
             }
         }
     }
@@ -403,20 +424,40 @@ public sealed partial class InstancesPage : Page, System.ComponentModel.INotifyP
         SyncTimer();
     }
 
-    /// <summary>按搜索词 / 状态 / 排序算出可见集合，并把模型映射为卡片视图模型。</summary>
-    private void Render()
+    /// <summary>
+    /// 按搜索词 / 状态 / 排序算出可见集合，并把模型映射为卡片视图模型。
+    ///
+    /// <paramref name="force"/>：跳过"内容未变"短路强制重建全部卡片。唯一调用方是
+    /// 主题切换 —— 卡片的画笔/样式（<see cref="InstanceCardPaint"/>）是构造时取的缓存，
+    /// 主题变了必须换新实例才会重新取色。
+    /// </summary>
+    private void Render(bool force = false)
     {
         // 初始化期的 SelectionChanged 会先于字段赋值触发（见 _ready 注释）：
         // 这时直接返回，等 OnNavigatedTo 里的首次 Render 再画。
         if (!_ready) return;
 
-        _visible = FilterAndSort();
+        var next = FilterAndSort();
+        var version = AppServices.IsReady ? AppServices.State.InstancesVersion : 0L;
 
-        _cards.Clear();
-        foreach (var summary in _visible)
+        // 内容未变则不重建（StateChanged 防线之外的第二道闸）：
+        // `instance:list` 每次成功都发 InstancesChanged（AppState 不判变化就 Invoke），
+        // 且 RefreshAsync 的 finally 与 ApplyStateSnapshot 会对同一批数据连跳两次 Render；
+        // Clear+Add 会重建全部 GridView 容器 —— 悬停、滚动位置与背景被重置，肉眼即"卡片闪动"。
+        // 两个条件各堵一条变化路径：版本（推送帧就地变异共享对象，字段比较探测不到，
+        // 见 _cardsVersion 注释）；字段比较（instance:list 换新对象但内容没变，据此跳过）。
+        if (force || version != _cardsVersion || !SameCards(_visible, next))
         {
-            _cards.Add(new InstanceCard(summary));
+            _cards.Clear();
+            foreach (var summary in next)
+            {
+                _cards.Add(new InstanceCard(summary));
+            }
+
+            _cardsVersion = version;
         }
+
+        _visible = next;
 
         var hasAny = _all.Count > 0;
         var hasVisible = _visible.Count > 0;
@@ -442,6 +483,56 @@ public sealed partial class InstancesPage : Page, System.ComponentModel.INotifyP
             : "当前状态筛选下没有实例。切换筛选条件试试。";
 
         UpdateDegradeBar();
+    }
+
+    /// <summary>
+    /// 两份可见序列是否对应同一批卡片内容（逐位比较，顺序敏感）。
+    ///
+    /// 与 <see cref="StateChanged"/> 分工不同：那个判"要不要替换 _all 快照"（运行态字段），
+    /// 这个判"要不要重建卡片容器" —— 比较范围是**卡片构造与筛选排序实际读取的字段**
+    /// （见 <see cref="CardDataEqual"/>）。名字/图标/强调色变了也必须重建，否则改完不显示。
+    /// </summary>
+    private static bool SameCards(List<InstanceSummary> current, List<InstanceSummary> next)
+    {
+        if (current.Count != next.Count) return false;
+
+        for (var i = 0; i < next.Count; i += 1)
+        {
+            if (!CardDataEqual(current[i], next[i])) return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// 两张卡片背后的模型在**界面可见层面**是否相等。
+    ///
+    /// 字段清单 = InstanceCard 构造函数读取的全部数据 + FilterAndSort/排序读取的字段：
+    /// 任一不同就意味着重建后像素会变，必须重建；全同则重建纯属闪动源。
+    /// 字符串一律 Ordinal（与本文件其余比较一致）；Meta/Runtime 允许为 null（JSON 可置 null）。
+    /// </summary>
+    private static bool CardDataEqual(InstanceSummary? a, InstanceSummary? b)
+    {
+        if (ReferenceEquals(a, b)) return true;
+        if (a is null || b is null) return false;
+
+        return a.Present == b.Present
+            && a.EngineInstalled == b.EngineInstalled
+            && a.PluginCount == b.PluginCount
+            && string.Equals(a.Problem, b.Problem, StringComparison.Ordinal)
+            && string.Equals(a.Meta?.Id, b.Meta?.Id, StringComparison.Ordinal)
+            && string.Equals(a.Meta?.Name, b.Meta?.Name, StringComparison.Ordinal)
+            && string.Equals(a.Meta?.DirName, b.Meta?.DirName, StringComparison.Ordinal)
+            && string.Equals(a.Meta?.Icon, b.Meta?.Icon, StringComparison.Ordinal)
+            && string.Equals(a.Meta?.Color, b.Meta?.Color, StringComparison.Ordinal)
+            && string.Equals(a.Meta?.Engine?.Version, b.Meta?.Engine?.Version, StringComparison.Ordinal)
+            && string.Equals(a.Meta?.Profile?.Template, b.Meta?.Profile?.Template, StringComparison.Ordinal)
+            && string.Equals(a.Meta?.CreatedAt, b.Meta?.CreatedAt, StringComparison.Ordinal)
+            && string.Equals(a.Meta?.LastLaunchedAt, b.Meta?.LastLaunchedAt, StringComparison.Ordinal)
+            && string.Equals(a.Runtime?.State, b.Runtime?.State, StringComparison.Ordinal)
+            && string.Equals(a.Runtime?.Url, b.Runtime?.Url, StringComparison.Ordinal)
+            && a.Runtime?.Port == b.Runtime?.Port
+            && string.Equals(a.Runtime?.LastError, b.Runtime?.LastError, StringComparison.Ordinal);
     }
 
     private List<InstanceSummary> FilterAndSort()
@@ -596,7 +687,9 @@ public sealed partial class InstancesPage : Page, System.ComponentModel.INotifyP
     {
         // 主题切换后语义色要重新取：语义画笔按主题走，缓存的旧画笔会滞留（约定 §6 的同类问题）。
         InstanceCardPaint.Reset();
-        Render();
+        // 必须强制重建：卡片数据可能一字未变（内容短路会跳过），但画笔/主按钮样式是构造时取的，
+        // 不换新实例就不会按新主题重新取色。
+        Render(force: true);
     }
 
     /* ------------------------------------------------------------------ *
@@ -1018,9 +1111,16 @@ public sealed partial class InstancesPage : Page, System.ComponentModel.INotifyP
 ///
 /// 属性是 get/set（而非只读）：<c>x:Bind</c> 的 OneWay 需要 setter 才能回写；定时器只改
 /// <see cref="LastLaunchedText"/> 一个字段，其余在卡片重建时一次性算好。
+///
+/// <see cref="LastLaunchedText"/> 必须经 <see cref="INotifyPropertyChanged"/> 通知：
+/// 卡片不再随 4 秒轮询无谓重建（见 Render 的内容短路）后，"最近启动 X 分钟前"只能靠
+/// 每秒定时器 + OneWay 绑定就地更新 —— 否则文本会停在卡片创建那一刻。
+/// 其余属性仅在构造时赋值，OneTime 绑定在重建时取值，无需通知。
 /// </summary>
-public sealed class InstanceCard
+public sealed class InstanceCard : System.ComponentModel.INotifyPropertyChanged
 {
+    public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
+
     public InstanceCard(InstanceSummary summary)
     {
         Summary = summary;
@@ -1096,10 +1196,41 @@ public sealed class InstanceCard
 
     public string PluginText { get; }
 
-    /// <summary>随定时器重算，见 <see cref="RefreshRelativeTimes"/>。</summary>
-    public string LastLaunchedText { get; set; }
+    private string _lastLaunchedText = string.Empty;
 
-    public string MetaSummary { get; }
+    /// <summary>随定时器重算，见 <see cref="RefreshRelativeTimes"/>。setter 发变更通知（OneWay 绑定需要）。</summary>
+    public string LastLaunchedText
+    {
+        get => _lastLaunchedText;
+        set
+        {
+            if (string.Equals(_lastLaunchedText, value, StringComparison.Ordinal)) return;
+            _lastLaunchedText = value;
+            PropertyChanged?.Invoke(
+                this,
+                new System.ComponentModel.PropertyChangedEventArgs(nameof(LastLaunchedText)));
+        }
+    }
+
+    private string _metaSummary = string.Empty;
+
+    /// <summary>
+    /// 卡片的屏幕阅读器摘要。尾部拼了相对时间，因此与 <see cref="LastLaunchedText"/> 同步
+    /// 由 <see cref="RefreshRelativeTimes"/> 就地更新（OneWay 绑定）—— 否则卡片不再随
+    /// 4 秒轮询重建后，这段摘要会冻结在创建那一刻。
+    /// </summary>
+    public string MetaSummary
+    {
+        get => _metaSummary;
+        set
+        {
+            if (string.Equals(_metaSummary, value, StringComparison.Ordinal)) return;
+            _metaSummary = value;
+            PropertyChanged?.Invoke(
+                this,
+                new System.ComponentModel.PropertyChangedEventArgs(nameof(MetaSummary)));
+        }
+    }
 
     public string State { get; }
 

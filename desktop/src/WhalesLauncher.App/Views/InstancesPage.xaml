@@ -279,7 +279,7 @@
                                     Grid.Row="2"
                                     Orientation="Horizontal"
                                     Spacing="8"
-                                    AutomationProperties.Name="{x:Bind MetaSummary}">
+                                    AutomationProperties.Name="{x:Bind MetaSummary, Mode=OneWay}">
                                     <FontIcon
                                         Glyph="&#xE950;"
                                         FontSize="16"
@@ -309,7 +309,7 @@
                                         VerticalAlignment="Center"
                                         AutomationProperties.AccessibilityView="Raw" />
                                     <TextBlock
-                                        Text="{x:Bind LastLaunchedText}"
+                                        Text="{x:Bind LastLaunchedText, Mode=OneWay}"
                                         Style="{StaticResource CaptionTextBlockStyle}"
                                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                         VerticalAlignment="Center" />
