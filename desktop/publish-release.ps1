@@ -8,8 +8,19 @@
 # extracts once and double-clicks):
 #     WhalesLauncher.exe        the application
 #     <runtime files>           .NET + Windows App SDK, self-contained
+#     bridge/server.cjs         the Node sidecar (version injected at build time)
 #     WhalesLauncher.vbs/.bat   optional entry points
 #     README-*.txt              Chinese getting-started notes
+#
+# WHY THE BRIDGE IS REBUILT HERE (2026-09 regression, fixed in v1.0.3):
+#     dist\bridge\server.cjs carries the launcher version compiled in
+#     (`--define:__WHALES_APP_VERSION__`, surfaced by app:version -> 关于页
+#     "启动器版本" and by pack:export's launcherVersion). dist\ is gitignored,
+#     so a bundle built before the version bump ships silently: the released
+#     v1.0.2 asset reports "1.0.1" and v1.0.1's reports "1.0.0". This script
+#     therefore rebuilds the bridge and then ASSERTS that the version compiled
+#     into the bundled bridge equals package.json's version, refusing to ship
+#     a mismatch instead of leaving it for the user to notice.
 #
 # WHY SELF-CONTAINED: the target machine must NOT need a .NET runtime
 # installed. Verified by extracting the produced zip to a clean folder and
@@ -30,13 +41,17 @@
 # characters and break parsing. User-facing Chinese lives in the README file
 # that gets packed, never in this script.
 #
-# EXIT CODES: 0 ok, 1 build failed, 2 staging failed, 3 zip failed
+# EXIT CODES: 0 ok, 1 build failed, 2 staging failed, 3 zip failed,
+#             4 bridge/version check failed
 # ---------------------------------------------------------------------------
 param(
     # Version label used in the file name. Defaults to package.json's version.
     [string]$Version,
     # Skip the build and reuse whatever is already in bin\x64\Release.
-    [switch]$NoBuild
+    [switch]$NoBuild,
+    # Skip rebuilding dist\bridge\server.cjs. The version assertion STILL runs,
+    # so this only saves time when the bundle is known to be current.
+    [switch]$NoBridge
 )
 
 $ErrorActionPreference = 'Stop'
@@ -78,6 +93,47 @@ $releaseBin = Join-Path $root 'desktop\src\WhalesLauncher.App\bin\x64\Release\ne
 
 Write-Host "[release] version = $Version"
 
+# ----------------------------------------------------------------- bridge
+# The version compiled into dist\bridge\server.cjs comes from package.json at
+# build time; a stale bundle is invisible until a user reads 关于页. Rebuild it
+# and verify the compiled-in version before anything is packaged.
+$bridgeRel = 'dist\bridge\server.cjs'
+$bridgePath = Join-Path $root $bridgeRel
+$buildBridge = Join-Path $root 'scripts\build-bridge.mjs'
+
+if (-not $NoBridge) {
+    if (-not (Test-Path -LiteralPath $buildBridge)) {
+        Write-Host "[release] bridge build script not found: $buildBridge" -ForegroundColor Red
+        exit 4
+    }
+    Write-Host '[release] rebuilding the Node sidecar (version is compiled in) ...' -ForegroundColor Cyan
+    & node $buildBridge
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host '[release] bridge build FAILED' -ForegroundColor Red
+        exit 4
+    }
+}
+
+if (-not (Test-Path -LiteralPath $bridgePath)) {
+    Write-Host "[release] $bridgeRel not found - run: node scripts\build-bridge.mjs" -ForegroundColor Red
+    exit 4
+}
+
+# The bundle carries: var BUILD_VERSION = true ? "1.0.3".trim() : "";
+$bridgeText = [System.IO.File]::ReadAllText($bridgePath)
+$m = [regex]::Match($bridgeText, 'BUILD_VERSION\s*=\s*[^"]*"([^"]+)"')
+if (-not $m.Success) {
+    Write-Host "[release] cannot find the compiled-in version in $bridgeRel" -ForegroundColor Red
+    exit 4
+}
+$bridgeVersion = $m.Groups[1].Value
+if ($bridgeVersion -ne $Version) {
+    Write-Host "[release] VERSION MISMATCH: package.json = $Version but the sidecar was built with $bridgeVersion" -ForegroundColor Red
+    Write-Host '[release] refusing to ship a package whose 关于页 would show the wrong version.' -ForegroundColor Red
+    exit 4
+}
+Write-Host "[release] sidecar version check ok ($bridgeVersion)" -ForegroundColor Green
+
 # ----------------------------------------------------------------- build
 if (-not $NoBuild) {
     Write-Host '[release] building Release self-contained ...' -ForegroundColor Cyan
@@ -114,6 +170,23 @@ if (-not (Test-Path -LiteralPath (Join-Path $stage 'WhalesLauncher.exe'))) {
     Write-Host '[release] staged package has no WhalesLauncher.exe at its root' -ForegroundColor Red
     exit 2
 }
+
+# The sidecar actually packed must carry this version too. This catches the
+# -NoBuild path, where bin\x64\Release still holds a copy from an older build
+# (csproj copies the bridge with PreserveNewest).
+$stagedBridge = Join-Path $stage 'bridge\server.cjs'
+if (-not (Test-Path -LiteralPath $stagedBridge)) {
+    Write-Host '[release] staged package has no bridge\server.cjs' -ForegroundColor Red
+    exit 2
+}
+$sm = [regex]::Match([System.IO.File]::ReadAllText($stagedBridge), 'BUILD_VERSION\s*=\s*[^"]*"([^"]+)"')
+$stagedVersion = if ($sm.Success) { $sm.Groups[1].Value } else { '<not found>' }
+if ($stagedVersion -ne $Version) {
+    Write-Host "[release] staged sidecar version is $stagedVersion, expected $Version" -ForegroundColor Red
+    Write-Host '[release] rebuild without -NoBuild (bin\x64\Release holds an older bridge copy).' -ForegroundColor Red
+    exit 2
+}
+Write-Host "[release] staged sidecar version check ok ($stagedVersion)" -ForegroundColor Green
 
 # ------------------------------------------------- user-facing extras
 # Copied from desktop\release-assets\ rather than kept in the repo root: the

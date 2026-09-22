@@ -1,6 +1,6 @@
 {
   "name": "whales-launcher",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "private": true,
   "description": "WhalesLauncher —— DeepSeek Harness (dsh) 的实例与版本管理启动器（WinUI 3 前端 + Node 侧车业务引擎）",
   "type": "module",
