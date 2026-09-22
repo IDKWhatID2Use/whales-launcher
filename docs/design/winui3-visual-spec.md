@@ -812,11 +812,13 @@ Grid[Auto, Auto, *]
     │                       FontFamily = Cascadia Mono, Consolas；滚动同步）
     └─ Col1: ScrollView > StackPanel(Spacing=24)
         ├─ Expander "隔离策略"（默认展开）
-        │   ├─ RadioButtons 工作区：共享（junction 到 shared/workspaces/<dirName>）/ 独立
-        │   ├─ RadioButtons 存档：共享 / 独立
-        │   ├─ RadioButtons 设置：共享 / 独立
-        │   └─ RadioButtons 凭证：继承主 home / 本实例独立
-        │       每项下方一句 BodyTextBlockStyle 说明后果；切换前 ContentDialog 确认（涉及目录搬运）
+        │   └─ StackPanel(Spacing=12)：4 个维度组，组间一条 Border Height=1 +
+        │      DividerStrokeColorDefaultBrush 细线分隔（槽位不是空白，见下方"分组标题"规格）
+        │       ├─ 组「工作区」：小标题(BodyStrong) → 说明(Body + TextFillColorSecondaryBrush) → RadioButtons 独立（默认）/ 共享（junction 到 shared/workspaces/<dirName>）
+        │       ├─ 组「存档」：同一结构 → RadioButtons 独立（默认）/ 共享
+        │       ├─ 组「设置」：同一结构 → RadioButtons 独立（默认）/ 共享
+        │       └─ 组「凭证」：同一结构 → RadioButtons 继承主 home（默认）/ 本实例独立
+        │           切换前 ContentDialog 确认（涉及目录搬运）
         ├─ Expander "启动"
         │   ├─ ToggleSwitch 启动后自动打开界面
         │   ├─ TextBox 追加参数（PlaceholderText 示例；解析为 appArgs 数组）
@@ -832,6 +834,7 @@ Grid[Auto, Auto, *]
 | 保存前不做"YAML 合法性"假保证 | 前端只标红可判定问题（空内容、行尾空白、明显缩进错误）；**不得**声称"YAML 合法"（真正的校验由后端 `profile.validateYaml` 给出） |
 | 共享冲突必须显式解决 | `settings.shareConflicts` 返回非空 → `InfoBar` 常驻（`IsClosable=false`）+ `ActionButton` 打开 `ContentDialog`，两个动作对应 `use-local`（把本地推给共享）/ `use-shared`（用共享覆盖本地，后端会写备份）。**禁止**默认替用户选一侧 |
 | 切换隔离维度 | 调 `instance.update`（`saves`/`settings`/`workspace`/`credentials`）；`workspace` 切到 `shared` 会创建 junction，必须先确认 |
+| 每个隔离维度必须有**可见**分组标题 | 4 个维度各自「小标题（工作区/存档/设置/凭证，BodyStrong）→ 后果说明 → 选项」，组间细线分隔。**只有 `AutomationProperties.Name` 不算分组标题**：它只服务 UIA，用户在屏幕上看到的仍是 4 组无名的「独立（默认）/ 共享」，无法判断每组管什么（2026-02 实测缺陷，向导第 4 步一直是对的、本页漏了）。`AutomationProperties.Name` 必须同时保留，UIA 用例 P3-03/P3-04 依赖它寻址 |
 
 **空态 / 加载态 / 错误态**
 - 空：`settings.yaml` 不存在 → 编辑器显示空文档 + `InfoBar Severity="Informational"` 说明"保存时将新建"。

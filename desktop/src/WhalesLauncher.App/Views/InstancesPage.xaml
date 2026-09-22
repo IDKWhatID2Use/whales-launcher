@@ -323,7 +323,8 @@
                                     IsOpen="True"
                                     Visibility="{x:Bind ProblemVisibility}"
                                     Message="{x:Bind ProblemText}"
-                                    AutomationProperties.Name="{x:Bind ProblemText}" />
+                                    ToolTipService.ToolTip="{x:Bind ProblemTooltip}"
+                                    AutomationProperties.Name="{x:Bind ProblemTooltip}" />
 
                                 <!-- 降级说明（present=false / engineInstalled=false）：主按钮被禁用时必须说明原因 -->
                                 <StackPanel

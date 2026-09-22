@@ -43,8 +43,20 @@ public sealed partial class YamlEditorView : UserControl
     /// <summary>是否有未保存的更改。</summary>
     public bool IsDirty => _isDirty;
 
-    /// <summary>当前文档文本（未 trim，保持用户原样）。</summary>
-    public string Text => Editor.Text;
+    /// <summary>
+    /// 当前文档文本（未 trim，保持用户原样；换行一律归一为 <c>\n</c>）。
+    ///
+    /// **必须归一**：WinUI 的 <c>TextBox</c> 底层是 RichEdit，它的 <c>Text</c> 用 <c>\r</c>
+    /// 作段落分隔符。读入一份 CRLF 的 <c>settings.yaml</c> 再取出 <c>Text</c>，得到的是
+    /// **纯 CR** 文本；原样写回磁盘就产出了"只有 \r 没有 \n"的 YAML。
+    ///
+    /// 实测后果（KREA2 实例）：dsh 的 settings 用 <c>yaml</c> 包解析，它**不把孤立的 \r
+    /// 当换行**，于是整份文件被当成一行，报
+    /// <c>BLOCK_AS_IMPLICIT_KEY … at line 1, column 15</c>，实例每次启动都崩。
+    /// 后端写入前的校验当时用的是 js-yaml（它接受纯 CR），所以这条损坏一路通过校验落了盘。
+    /// 归一在这里做，是因为所有 YAML 落盘路径都要经过本类的 <see cref="Text"/>。
+    /// </summary>
+    public string Text => ToLf(Editor.Text);
 
     /// <summary>只读/可编辑。读取失败时置 false 并禁用编辑区（规范 §9.4 明确要求不得显示空文档）。</summary>
     public bool IsEditable
@@ -78,8 +90,9 @@ public sealed partial class YamlEditorView : UserControl
     {
         var document = text ?? string.Empty;
 
-        // 直接改 Text 会触发 TextChanged → _isDirty 被置位，因此先写基线再设文本
-        _savedText = document;
+        // 直接改 Text 会触发 TextChanged → _isDirty 被置位，因此先写基线再设文本。
+        // 基线也归一：TextBox 取回的文本是 CR，若拿原文当基线，装载完成的那一刻就会被判成"有未保存的更改"
+        _savedText = ToLf(document);
         Editor.Text = document;
         SetDirty(false);
         UpdateGutter();
@@ -89,7 +102,7 @@ public sealed partial class YamlEditorView : UserControl
     /// <summary>保存成功后调用：把当前文本记为新的基线。</summary>
     public void MarkSaved()
     {
-        _savedText = Editor.Text;
+        _savedText = ToLf(Editor.Text);
         SetDirty(false);
     }
 
@@ -98,10 +111,24 @@ public sealed partial class YamlEditorView : UserControl
 
     private void OnEditorTextChanged(object sender, TextChangedEventArgs e)
     {
-        SetDirty(!string.Equals(Editor.Text, _savedText, StringComparison.Ordinal));
+        SetDirty(!string.Equals(ToLf(Editor.Text), _savedText, StringComparison.Ordinal));
 
         UpdateGutter();
         UpdateFindings();
+    }
+
+    /// <summary>
+    /// 换行归一：<c>\r\n</c> 与孤立的 <c>\r</c> 都变成 <c>\n</c>。
+    /// 理由见 <see cref="Text"/>（TextBox 用 CR 作段落分隔符，落盘会让 dsh 解析失败）。
+    /// </summary>
+    private static string ToLf(string? text)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            return string.Empty;
+        }
+
+        return text.IndexOf('\r') < 0 ? text : text.Replace("\r\n", "\n").Replace('\r', '\n');
     }
 
     private void SetDirty(bool dirty)
@@ -117,7 +144,8 @@ public sealed partial class YamlEditorView : UserControl
 
     private void UpdateFindings()
     {
-        _findings = YamlLint.Inspect(Editor.Text);
+        // 用归一后的文本：CR 文本在 YamlLint 里会被当成一整行，所有行号提示都会错
+        _findings = YamlLint.Inspect(ToLf(Editor.Text));
 
         if (_findings.Count == 0)
         {
@@ -153,7 +181,8 @@ public sealed partial class YamlEditorView : UserControl
     /// </summary>
     private void UpdateGutter()
     {
-        var text = Editor.Text;
+        // 同样要用归一后的文本：TextBox 的 CR 不是 '\n'，不归一会永远只数出 1 行
+        var text = ToLf(Editor.Text);
         var lineCount = CountLines(text);
         if (lineCount == _gutterLineCount)
         {

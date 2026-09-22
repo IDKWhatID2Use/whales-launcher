@@ -146,6 +146,30 @@ test('设置读写：YAML 校验、往返、缺失返回空串', async (t) => {
   assert.equal(await core.readInstanceSettings(root, meta), '');
 });
 
+test('设置读写：CR/CRLF 换行一律归一为 LF（否则 dsh 的 yaml 解析器拒绝整份文件）', async (t) => {
+  const { root, meta } = await setup(t, 'profile-settings-crlf');
+  const crlf = 'pet:\r\n  visible: true\r\n  size: 160\r\n';
+  await core.writeInstanceSettings(root, meta, crlf);
+  const written = await core.readInstanceSettings(root, meta);
+  assert.equal(written, 'pet:\n  visible: true\n  size: 160\n');
+  assert.equal(written.includes('\r'), false);
+
+  // 孤立的 CR（旧版编辑器落盘的形态）：归一后必须是合法且可被 dsh 读到的 YAML
+  await core.writeInstanceSettings(root, meta, 'pet:\r  visible: true\r');
+  assert.equal(await core.readInstanceSettings(root, meta), 'pet:\n  visible: true\n');
+});
+
+test('validateYaml：拒绝孤立 CR（js-yaml 放行，dsh 的解析器不放行）', async (t) => {
+  await setup(t, 'profile-yaml-cr');
+  assert.equal(profileModule.validateYaml('a:\n  b: 1\n'), null);
+  assert.equal(profileModule.validateYaml('a:\r\n  b: 1\r\n'), null);
+  const problem = profileModule.validateYaml('a:\r  b: 1\r');
+  assert.ok(problem !== null && problem.includes('孤立的 CR'), `应报孤立 CR，实际：${problem}`);
+
+  // 归一后再校验就是合法的 —— 与 writeInstanceSettings 的实际顺序一致
+  assert.equal(profileModule.validateYaml(profileModule.toLf('a:\r  b: 1\r')), null);
+});
+
 test('patch 文件：备份改名 + 拒绝写空内容', async (t) => {
   const { profileDir } = await setup(t, 'profile-patch');
   assert.equal(await readPatchFile(profileDir), '# patch\n[]\n');

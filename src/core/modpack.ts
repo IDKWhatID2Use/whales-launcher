@@ -32,7 +32,7 @@ import { makeDirName, validateName } from './names';
 import { corePaths, instancePaths } from './paths';
 import { listEngines } from './engine';
 import { pluginAdd } from './plugins';
-import { readBundles, readProfileManifest, writeProfileManifest, validateYaml, type ProfileManifest } from './profile';
+import { readBundles, readProfileManifest, writeProfileManifest, toLf, validateYaml, type ProfileManifest } from './profile';
 
 /** 包元数据文件名。 */
 export const PACK_MANIFEST_NAME = 'whalelauncher-pack.json';
@@ -186,13 +186,15 @@ export async function importPack(
     //    必须**先校验 YAML**：坏配置一旦落盘，该实例之后启动必然失败
     const settings = await readText(path.join(staged, 'home', 'settings.yaml'));
     if (settings !== null && settings.trim().length > 0) {
-      const yamlProblem = validateYaml(settings);
+      // 归一换行后再校验：包里可能是 CR 文本（js-yaml 放过、dsh 拒绝），本启动器不接受
+      const normalized = toLf(settings);
+      const yamlProblem = validateYaml(normalized);
       if (yamlProblem !== null) {
         const message = `home/settings.yaml 未还原（YAML 不合法：${yamlProblem}）`;
         warnings.push(message);
         onLog?.('system', `[import] ${message}\n`);
       } else {
-        await writeTextAtomic(paths.settingsFile, settings);
+        await writeTextAtomic(paths.settingsFile, normalized);
       }
     }
 

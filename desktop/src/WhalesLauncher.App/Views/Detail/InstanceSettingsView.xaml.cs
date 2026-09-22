@@ -6,12 +6,59 @@ using WhalesLauncher.Services;
 
 namespace WhalesLauncher.Views.Detail;
 
-/// <summary>隔离策略的一个二选一选项（<c>RadioButtons</c> 直接绑它，显示文本取 <see cref="ToString"/>）。</summary>
-/// <param name="Label">显示文本（中文）。</param>
-/// <param name="Value">写回契约的字面值。</param>
-public sealed record IsolationOption(string Label, string Value)
+/// <summary>
+/// 一个隔离维度的二选一（两个普通 <c>RadioButton</c>，<c>Tag</c> 承载契约字面值）。
+///
+/// **为什么不用 <c>muxc:RadioButtons</c>**：那个控件在"程序化勾选"上不生效 —— 实测把
+/// <c>SelectedIndex</c> 或 <c>SelectedItem</c> 写进去后读回来是对的，但界面上八个选项
+/// 全是未选中的空圆点（<c>docs/audit/final/p3-settings.png</c>、<c>.probe\qa-out\settings*\after.png</c>
+/// 都留下了现场），用户看不出当前实例用的是哪一档隔离策略。
+/// 普通 <c>RadioButton</c> + <c>GroupName</c> 是标准控件行为：写 <c>IsChecked</c> 就画勾，
+/// 同一 <c>GroupName</c> 内互斥由框架保证。
+///
+/// 契约字面值放在 XAML 的 <c>Tag</c> 上（紧挨着它对应的显示文案），
+/// 代码只在"当前值 → 勾选态"与"勾选态 → 当前值"两个方向上搬运，不做文案匹配。
+/// </summary>
+/// <param name="Field">写回契约的字段名（<c>instance:update</c> 的补丁键）。</param>
+/// <param name="Dimension">界面维度名（用于确认框与提示文案）。</param>
+/// <param name="First">第一个选项（索引 0）。</param>
+/// <param name="Second">第二个选项（索引 1）。</param>
+/// <param name="ConfirmTitle">切换确认框标题。</param>
+/// <param name="ConfirmMessage">切换确认框正文（说明后果）。</param>
+internal sealed record ModeChoice(
+    string Field,
+    string Dimension,
+    RadioButton First,
+    RadioButton Second,
+    string ConfirmTitle,
+    string ConfirmMessage)
 {
-    public override string ToString() => Label;
+    /// <summary>本维度两个选项各自的契约字面值。</summary>
+    public string FirstValue => First.Tag as string ?? string.Empty;
+
+    /// <summary>第二个选项的契约字面值。</summary>
+    public string SecondValue => Second.Tag as string ?? string.Empty;
+
+    /// <summary>当前勾中的那一项（都没勾中时返回 <c>null</c>）。</summary>
+    public RadioButton? CheckedRadio => First.IsChecked == true ? First : Second.IsChecked == true ? Second : null;
+
+    /// <summary>把勾选态切到 <paramref name="value"/> 对应的一项。</summary>
+    public void Apply(string? value)
+    {
+        First.IsChecked = string.Equals(FirstValue, value, StringComparison.Ordinal);
+        Second.IsChecked = string.Equals(SecondValue, value, StringComparison.Ordinal);
+    }
+
+    /// <summary>某个契约值对应的显示文案（未知值原样返回）。</summary>
+    public string LabelOf(string value)
+    {
+        if (string.Equals(FirstValue, value, StringComparison.Ordinal)) return TextOf(First);
+        if (string.Equals(SecondValue, value, StringComparison.Ordinal)) return TextOf(Second);
+        return value;
+    }
+
+    /// <summary>单选项的显示文案。</summary>
+    public static string TextOf(RadioButton radio) => radio.Content as string ?? string.Empty;
 }
 
 /// <summary>
@@ -35,23 +82,17 @@ public sealed record IsolationOption(string Label, string Value)
 /// </summary>
 public sealed partial class InstanceSettingsView : UserControl
 {
-    private static readonly IsolationOption[] ShareOptions =
-    {
-        new("独立（默认）", ShareModeValues.Local),
-        new("共享", ShareModeValues.Shared),
-    };
-
-    private static readonly IsolationOption[] CredentialsOptions =
-    {
-        new("继承主 home（默认）", CredentialsModeValues.Inherit),
-        new("本实例独立", CredentialsModeValues.Local),
-    };
-
     private InstanceSummary? _instance;
     private LauncherConfig? _config;
     private ShareConflict[] _conflicts = Array.Empty<ShareConflict>();
     private bool _loading;
     private bool _suppressModeEvents;
+
+    /// <summary>四个隔离维度（在构造函数里绑定到 XAML 上的单选项）。</summary>
+    private readonly ModeChoice _workspace;
+    private readonly ModeChoice _saves;
+    private readonly ModeChoice _settings;
+    private readonly ModeChoice _credentials;
 
     public InstanceSettingsView()
     {
@@ -59,6 +100,37 @@ public sealed partial class InstanceSettingsView : UserControl
 
         YamlEditor.DirtyChanged += OnEditorDirtyChanged;
         YamlEditor.SaveRequested += OnEditorSaveRequested;
+
+        _workspace = new ModeChoice(
+            "workspace",
+            "工作区",
+            WorkspaceLocalRadio,
+            WorkspaceSharedRadio,
+            "切换工作区隔离",
+            "共享会把本实例的工作区通过 junction 指向共享目录，已有文件保留在原地，"
+                + "之后写入的工作区文件对其它共享同一目录的实例可见。");
+        _saves = new ModeChoice(
+            "saves",
+            "存档",
+            SavesLocalRadio,
+            SavesSharedRadio,
+            "切换存档隔离",
+            "共享会让多个实例读写同一份 sessions 目录，任一侧新增或删除存档都会对其它实例立刻生效。");
+        _settings = new ModeChoice(
+            "settings",
+            "设置",
+            SettingsLocalRadio,
+            SettingsSharedRadio,
+            "切换设置隔离",
+            "共享后 settings.yaml 指向共享文件。若本地与共享内容不一致，"
+                + "core 会保留本地并登记一条共享冲突，需要你显式选择以哪一侧为准。");
+        _credentials = new ModeChoice(
+            "credentials",
+            "凭证",
+            CredentialsInheritRadio,
+            CredentialsLocalRadio,
+            "切换凭证隔离",
+            "「继承主 home」复用全局凭证；「本实例独立」使用实例目录内的凭证，两者登录状态互不影响。");
     }
 
     /// <summary>编辑器是否把内容改成了未保存状态（外壳切页签前据此提示）。</summary>
@@ -405,24 +477,8 @@ public sealed partial class InstanceSettingsView : UserControl
         AutoOpenSwitch.IsOn = meta.Launch.AutoOpenBrowser;
         AppArgsBox.Text = string.Join(' ', meta.Launch.AppArgs);
 
-        // 隔离策略：先装选项再设选中，且期间抑制事件（否则装载阶段就会弹确认对话框）
-        _suppressModeEvents = true;
-        try
-        {
-            WorkspaceRadios.ItemsSource = ShareOptions;
-            SavesRadios.ItemsSource = ShareOptions;
-            SettingsRadios.ItemsSource = ShareOptions;
-            CredentialsRadios.ItemsSource = CredentialsOptions;
-
-            WorkspaceRadios.SelectedIndex = IndexOf(ShareOptions, meta.Workspace.Mode);
-            SavesRadios.SelectedIndex = IndexOf(ShareOptions, meta.Saves.Mode);
-            SettingsRadios.SelectedIndex = IndexOf(ShareOptions, meta.Settings.Mode);
-            CredentialsRadios.SelectedIndex = IndexOf(CredentialsOptions, meta.Credentials.Mode);
-        }
-        finally
-        {
-            _suppressModeEvents = false;
-        }
+        // 隔离策略：勾中当前值（期间抑制 Checked 事件，否则装载阶段就会弹确认对话框）
+        ApplyModeSelection(meta);
 
         LaunchPathsText.Text = _config is { } config
             ? $"主 home（凭证继承目标）：{config.PrimaryHome}\n本实例目录名：{meta.DirName}\n实际 DSH_HOME 与工作目录以启动结果为准，本页不臆测。"
@@ -431,62 +487,39 @@ public sealed partial class InstanceSettingsView : UserControl
         DeleteButton.IsEnabled = true;
     }
 
-    private static int IndexOf(IsolationOption[] options, string? value)
+    /// <summary>
+    /// 按当前实例的四个维度重置勾选态。
+    ///
+    /// 期间抑制 <c>Checked</c>：写 <c>IsChecked</c> 会走和用户点击同一条事件路径，
+    /// 不抑制的话装载阶段就会弹出"是否切换隔离"的确认框。
+    /// </summary>
+    private void ApplyModeSelection(InstanceMeta meta)
     {
-        if (value is null) return 0;
-
-        for (var i = 0; i < options.Length; i++)
+        _suppressModeEvents = true;
+        try
         {
-            if (string.Equals(options[i].Value, value, StringComparison.Ordinal))
-            {
-                return i;
-            }
+            _workspace.Apply(meta.Workspace.Mode);
+            _saves.Apply(meta.Saves.Mode);
+            _settings.Apply(meta.Settings.Mode);
+            _credentials.Apply(meta.Credentials.Mode);
         }
-
-        return 0;
+        finally
+        {
+            _suppressModeEvents = false;
+        }
     }
 
-    private void OnWorkspaceModeChanged(object sender, SelectionChangedEventArgs e)
-        => _ = ChangeModeAsync(
-            dimension: "工作区",
-            currentValue: instance => instance.Meta.Workspace.Mode,
-            radios: WorkspaceRadios,
-            options: ShareOptions,
-            confirmTitle: "切换工作区隔离",
-            confirmMessage: "共享会把本实例的工作区通过 junction 指向共享目录，已有文件保留在原地，"
-                + "之后写入的工作区文件对其它共享同一目录的实例可见。",
-            field: "workspace");
+    private void OnWorkspaceModeChecked(object sender, RoutedEventArgs e) =>
+        _ = ChangeModeAsync(_workspace, instance => instance.Meta.Workspace.Mode);
 
-    private void OnSavesModeChanged(object sender, SelectionChangedEventArgs e)
-        => _ = ChangeModeAsync(
-            dimension: "存档",
-            currentValue: instance => instance.Meta.Saves.Mode,
-            radios: SavesRadios,
-            options: ShareOptions,
-            confirmTitle: "切换存档隔离",
-            confirmMessage: "共享会让多个实例读写同一份 sessions 目录，任一侧新增或删除存档都会对其它实例立刻生效。",
-            field: "saves");
+    private void OnSavesModeChecked(object sender, RoutedEventArgs e) =>
+        _ = ChangeModeAsync(_saves, instance => instance.Meta.Saves.Mode);
 
-    private void OnSettingsModeChanged(object sender, SelectionChangedEventArgs e)
-        => _ = ChangeModeAsync(
-            dimension: "设置",
-            currentValue: instance => instance.Meta.Settings.Mode,
-            radios: SettingsRadios,
-            options: ShareOptions,
-            confirmTitle: "切换设置隔离",
-            confirmMessage: "共享后 settings.yaml 指向共享文件。若本地与共享内容不一致，"
-                + "core 会保留本地并登记一条共享冲突，需要你显式选择以哪一侧为准。",
-            field: "settings");
+    private void OnSettingsModeChecked(object sender, RoutedEventArgs e) =>
+        _ = ChangeModeAsync(_settings, instance => instance.Meta.Settings.Mode);
 
-    private void OnCredentialsModeChanged(object sender, SelectionChangedEventArgs e)
-        => _ = ChangeModeAsync(
-            dimension: "凭证",
-            currentValue: instance => instance.Meta.Credentials.Mode,
-            radios: CredentialsRadios,
-            options: CredentialsOptions,
-            confirmTitle: "切换凭证隔离",
-            confirmMessage: "「继承主 home」复用全局凭证；「本实例独立」使用实例目录内的凭证，两者登录状态互不影响。",
-            field: "credentials");
+    private void OnCredentialsModeChecked(object sender, RoutedEventArgs e) =>
+        _ = ChangeModeAsync(_credentials, instance => instance.Meta.Credentials.Mode);
 
     /// <summary>
     /// 切换一个隔离维度。
@@ -494,47 +527,43 @@ public sealed partial class InstanceSettingsView : UserControl
     /// 按规范 §9.4：**先确认再改**（涉及目录搬运），取消则把选项回退到当前模式；
     /// 后端失败同样回退 —— 绝不让界面显示一个并未生效的值。
     /// </summary>
-    private async Task ChangeModeAsync(
-        string dimension,
-        Func<InstanceSummary, string> currentValue,
-        RadioButtons radios,
-        IsolationOption[] options,
-        string confirmTitle,
-        string confirmMessage,
-        string field)
+    private async Task ChangeModeAsync(ModeChoice choice, Func<InstanceSummary, string> currentValue)
     {
         if (_suppressModeEvents || _loading || _instance is null)
         {
             return;
         }
 
-        if (radios.SelectedItem is not IsolationOption option)
+        var selected = choice.CheckedRadio;
+        var selectedValue = selected?.Tag as string;
+        if (selected is null || selectedValue is null)
         {
             return;
         }
 
+        var selectedLabel = ModeChoice.TextOf(selected);
         var instance = _instance;
         var current = currentValue(instance);
-        if (string.Equals(option.Value, current, StringComparison.Ordinal))
+        if (string.Equals(selectedValue, current, StringComparison.Ordinal))
         {
             return;
         }
 
         var confirmed = await AppServices.Dialogs.ConfirmAsync(
-            confirmTitle,
-            $"{confirmMessage}\n\n将把「{dimension}」从「{Label(options, current)}」改为「{option.Label}」。",
+            choice.ConfirmTitle,
+            $"{choice.ConfirmMessage}\n\n将把「{choice.Dimension}」从「{choice.LabelOf(current)}」改为「{selectedLabel}」。",
             "确认切换",
             "取消");
 
         if (!confirmed)
         {
-            RevertSelection(radios, options, current);
+            RevertSelection(choice, current);
             return;
         }
 
         // 用 JsonObject 而不是匿名对象：便于"只提交真正改动的字段"，也与 UpdateInstancePatch
         // 的注释一致（null 会被丢弃，必须显式表达）
-        var patch = new JsonObject { [field] = option.Value };
+        var patch = new JsonObject { [choice.Field] = selectedValue };
 
         var result = await AppServices.Bridge.CallAsync<InstanceSummary>(
             Channels.InstanceUpdate,
@@ -543,8 +572,8 @@ public sealed partial class InstanceSettingsView : UserControl
 
         if (!result.Ok)
         {
-            RevertSelection(radios, options, current);
-            ShowError($"切换{dimension}隔离失败", result.Error ?? "未知错误");
+            RevertSelection(choice, current);
+            ShowError($"切换{choice.Dimension}隔离失败", result.Error ?? "未知错误");
             return;
         }
 
@@ -554,31 +583,18 @@ public sealed partial class InstanceSettingsView : UserControl
         }
 
         InfoBarArea.IsOpen = false;
-        AppServices.Toast.Success($"{dimension}隔离已改为「{option.Label}」");
+        AppServices.Toast.Success($"{choice.Dimension}隔离已改为「{selectedLabel}」");
 
         // 左栏与列表页也要跟上，否则详情页改了、列表页还显示旧值
         await AppServices.State.RefreshInstancesAsync();
     }
 
-    private static string Label(IsolationOption[] options, string value)
-    {
-        foreach (var option in options)
-        {
-            if (string.Equals(option.Value, value, StringComparison.Ordinal))
-            {
-                return option.Label;
-            }
-        }
-
-        return value;
-    }
-
-    private void RevertSelection(RadioButtons radios, IsolationOption[] options, string current)
+    private void RevertSelection(ModeChoice choice, string current)
     {
         _suppressModeEvents = true;
         try
         {
-            radios.SelectedIndex = IndexOf(options, current);
+            choice.Apply(current);
         }
         finally
         {

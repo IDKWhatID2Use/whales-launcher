@@ -131,6 +131,45 @@ try {
     $pathOk = ($pathText.Length -gt 0) -and (Test-UiTextContained -Scope $root -Needle $L.isolationTitle)
     Add-UiCheck -Case $case -Id 'P3-07' -Title $C.'P3-07' -Kind 'existence' -Ok $pathOk `
         -Detail "PathText='$pathText' isolationSectionVisible=$(Test-UiTextContained -Scope $root -Needle $L.isolationTitle)"
+
+    # ---------------------------------------------------------------- P3-08
+    # Every dimension must ALSO carry a visible group heading. The heading is a
+    # plain TextBlock sitting directly ABOVE the radio group; AutomationProperties.Name
+    # on the RadioButtons is NOT a heading - it only feeds screen readers, so
+    # without this the page shows four unnamed "local (default) / shared" pairs
+    # and the user cannot tell which dimension each pair governs (real defect,
+    # fixed 2026-02).
+    #
+    # Read it through the preceding SIBLINGS, not through Get-ElementParent: the
+    # per-dimension StackPanels carry only x:Name and therefore have no UIA peer,
+    # so the control-view parent is the first ancestor that does - and that
+    # ancestor is shared by all four groups (P3-04's longestText comes out
+    # identical for every group for exactly this reason). Walking left reaches
+    # the real heading; walking up cannot tell the groups apart.
+    # The needle is matched EXACTLY so a long sentence that merely mentions the
+    # dimension does not satisfy the check.
+    $titled = 0
+    $titleDetails = New-Object System.Collections.Generic.List[string]
+    foreach ($group in $groups) {
+        $heading = $L.isolationGroupTitles.PSObject.Properties[$group.Key].Value
+        $el = Find-ByName -Name $group.Name -Scope $root -Exact -TimeoutMs 5000 -AllowMissing
+        if ($null -eq $el) {
+            $titleDetails.Add("$($group.Key)=GROUP-MISSING")
+            continue
+        }
+        if ([string]::IsNullOrEmpty($heading)) {
+            $titleDetails.Add("$($group.Key)=NO-LABEL-FOR-KEY")
+            continue
+        }
+        $before = @(Get-UiPrecedingTexts -Element $el -Max 8)
+        $has = $false
+        foreach ($text in $before) { if ($text -ceq $heading) { $has = $true; break } }
+        if ($has) { $titled++ }
+        $seen = @($before | Select-Object -First 3) -join ' / '
+        $titleDetails.Add("$($group.Key)='$heading' visible=$has above='$seen'")
+    }
+    Add-UiCheck -Case $case -Id 'P3-08' -Title $C.'P3-08' -Kind 'existence' -Ok ($titled -eq 4) `
+        -Detail "groups with an exact visible heading directly above them = $titled/4 :: $($titleDetails -join ' ; ')"
 }
 catch {
     $failure = Get-UiCaseFailure -ErrorRecord $_

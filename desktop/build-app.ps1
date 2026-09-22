@@ -20,6 +20,15 @@
       3. XAML incremental compilation replays STALE errors for files already fixed.
          Use -Rebuild when an error's line number does not match the file's actual content.
 
+    4. A XAML edit can build "successfully" and still NOT reach the app. XamlCompiler
+       caches obj\...\Views\**\<View>.xbf, and MakePri regenerates WhalesLauncher.pri;
+       when either is older than the .xaml source, the launched app renders the
+       PREVIOUS UI. Observed for real: group headings added to the settings page were
+       missing in a UIA run that had just passed `dotnet build` AND `-Rebuild`;
+       deleting obj\Debug + bin\Debug and rebuilding is what made them show up. The
+       stale-XAML check below warns about exactly this, so never trust a UI test that
+       reports on a view you just edited without reading that warning.
+
     NOTE: ASCII-only by design. PowerShell 5.1 reads .ps1 files as ANSI, so non-ASCII
     characters in this file (Chinese comments, etc.) would be mis-decoded into syntax errors.
 
@@ -113,6 +122,24 @@ try {
 
         $summary = $output | Select-String -Pattern 'Error\(s\)|Warning\(s\)|Build succeeded'
         if ($summary) { $summary | ForEach-Object { Write-Host ("[build] " + $_.Line.Trim()) } }
+
+        # --- Problem 4: XAML edits that never reached the app (see .NOTES) -----
+        # Compare the newest REAL .xaml source against the shipped resource. The
+        # obj\ and bin\ trees live under src\ and hold the compiler's own copies of
+        # these files, so they must be filtered out or this check cries wolf.
+        if ($exitCode -eq 0) {
+            $srcRoot = Join-Path $PSScriptRoot 'src'
+            $binRoot = Join-Path $PSScriptRoot 'src\WhalesLauncher.App\bin'
+            $newestXaml = Get-ChildItem $srcRoot -Recurse -Filter '*.xaml' -ErrorAction SilentlyContinue |
+                Where-Object { $_.FullName -notmatch '\\obj\\' -and $_.FullName -notmatch '\\bin\\' } |
+                Sort-Object LastWriteTime -Descending | Select-Object -First 1
+            $newestPri = Get-ChildItem $binRoot -Recurse -Filter 'WhalesLauncher.pri' -ErrorAction SilentlyContinue |
+                Sort-Object LastWriteTime -Descending | Select-Object -First 1
+            if ($newestXaml -and $newestPri -and ($newestXaml.LastWriteTime -gt $newestPri.LastWriteTime)) {
+                Write-Host "[build] NOTE: newest XAML source ($($newestXaml.Name), $($newestXaml.LastWriteTime)) is newer than $($newestPri.Name) ($($newestPri.LastWriteTime))."
+                Write-Host "[build] NOTE: if that .xaml was just edited, the app may still render the PREVIOUS UI. Delete obj\Debug + bin\Debug, rebuild, then re-verify."
+            }
+        }
 
         Write-Host "[build] done, exit=$exitCode"
         exit $exitCode

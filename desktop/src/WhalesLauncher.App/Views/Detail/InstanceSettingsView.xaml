@@ -194,58 +194,135 @@
             <!-- Col1：设置面板 -->
             <ScrollView Grid.Column="1" VerticalScrollBarVisibility="Auto">
                 <StackPanel Spacing="8">
-                    <!-- 隔离策略：4 个维度各一组二选一 + 一句后果说明 -->
+                    <!-- 隔离策略：4 个维度各一组二选一。每组「维度小标题 → 后果说明 → 选项」，
+                         组间用 DividerStrokeColorDefaultBrush 细线分隔；文案与向导第 4 步保持一致。 -->
                     <Expander HorizontalAlignment="Stretch" IsExpanded="True">
                         <Expander.Header>
                             <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="隔离策略" />
                         </Expander.Header>
                         <StackPanel Spacing="12">
-                            <StackPanel Spacing="4">
-                                <muxc:RadioButtons
-                                    x:Name="WorkspaceRadios"
-                                    AutomationProperties.Name="工作区隔离策略"
-                                    SelectionChanged="OnWorkspaceModeChanged" />
+                            <StackPanel Spacing="8">
+                                <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="工作区" />
                                 <TextBlock
                                     Style="{StaticResource BodyTextBlockStyle}"
                                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                     Text="共享时实例的工作区通过 junction 指向 shared/workspaces/&lt;目录名&gt;，多个实例共用同一份工作区文件。"
                                     TextWrapping="Wrap" />
+                                <!--
+                                    用普通 RadioButton + GroupName，而**不用** muxc:RadioButtons：
+                                    后者在程序化勾选上不生效（实测：SelectedIndex / SelectedItem 都能写进去、
+                                    但界面上八个选项全是不选中的空圆点，用户看不出当前实例用的是哪一档）。
+                                    这里是静态的两个选项，Tag 承载契约字面值，选中态直接写 IsChecked。
+                                -->
+                                <!-- 选项组容器：P3-03/P3-08 用这个 Name 定位整组（原先挂在 muxc:RadioButtons 上） -->
+                                <StackPanel Spacing="4" AutomationProperties.Name="工作区隔离策略">
+                                    <RadioButton
+                                        x:Name="WorkspaceLocalRadio"
+                                        HorizontalAlignment="Left"
+                                        AutomationProperties.Name="工作区独立"
+                                        Checked="OnWorkspaceModeChecked"
+                                        Content="独立（默认）"
+                                        GroupName="WorkspaceIsolation"
+                                        Tag="local" />
+                                    <RadioButton
+                                        x:Name="WorkspaceSharedRadio"
+                                        HorizontalAlignment="Left"
+                                        AutomationProperties.Name="工作区共享"
+                                        Checked="OnWorkspaceModeChecked"
+                                        Content="共享"
+                                        GroupName="WorkspaceIsolation"
+                                        Tag="shared" />
+                                </StackPanel>
                             </StackPanel>
 
-                            <StackPanel Spacing="4">
-                                <muxc:RadioButtons
-                                    x:Name="SavesRadios"
-                                    AutomationProperties.Name="存档隔离策略"
-                                    SelectionChanged="OnSavesModeChanged" />
+                            <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+
+                            <StackPanel Spacing="8">
+                                <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="存档" />
                                 <TextBlock
                                     Style="{StaticResource BodyTextBlockStyle}"
                                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                     Text="共享时多个实例读写同一份 sessions 存档目录，任一侧的改动对其它实例立即可见。"
                                     TextWrapping="Wrap" />
+                                <!-- 选项组容器：P3-03/P3-08 用这个 Name 定位整组（原先挂在 muxc:RadioButtons 上） -->
+                                <StackPanel Spacing="4" AutomationProperties.Name="存档隔离策略">
+                                    <RadioButton
+                                        x:Name="SavesLocalRadio"
+                                        HorizontalAlignment="Left"
+                                        AutomationProperties.Name="存档独立"
+                                        Checked="OnSavesModeChecked"
+                                        Content="独立（默认）"
+                                        GroupName="SavesIsolation"
+                                        Tag="local" />
+                                    <RadioButton
+                                        x:Name="SavesSharedRadio"
+                                        HorizontalAlignment="Left"
+                                        AutomationProperties.Name="存档共享"
+                                        Checked="OnSavesModeChecked"
+                                        Content="共享"
+                                        GroupName="SavesIsolation"
+                                        Tag="shared" />
+                                </StackPanel>
                             </StackPanel>
 
-                            <StackPanel Spacing="4">
-                                <muxc:RadioButtons
-                                    x:Name="SettingsRadios"
-                                    AutomationProperties.Name="设置隔离策略"
-                                    SelectionChanged="OnSettingsModeChanged" />
+                            <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+
+                            <StackPanel Spacing="8">
+                                <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="设置" />
                                 <TextBlock
                                     Style="{StaticResource BodyTextBlockStyle}"
                                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                     Text="共享时 settings.yaml 指向共享文件；本地与共享内容不一致时会登记共享冲突，需你显式选择以哪一侧为准。"
                                     TextWrapping="Wrap" />
+                                <!-- 选项组容器：P3-03/P3-08 用这个 Name 定位整组（原先挂在 muxc:RadioButtons 上） -->
+                                <StackPanel Spacing="4" AutomationProperties.Name="设置隔离策略">
+                                    <RadioButton
+                                        x:Name="SettingsLocalRadio"
+                                        HorizontalAlignment="Left"
+                                        AutomationProperties.Name="设置独立"
+                                        Checked="OnSettingsModeChecked"
+                                        Content="独立（默认）"
+                                        GroupName="SettingsIsolation"
+                                        Tag="local" />
+                                    <RadioButton
+                                        x:Name="SettingsSharedRadio"
+                                        HorizontalAlignment="Left"
+                                        AutomationProperties.Name="设置共享"
+                                        Checked="OnSettingsModeChecked"
+                                        Content="共享"
+                                        GroupName="SettingsIsolation"
+                                        Tag="shared" />
+                                </StackPanel>
                             </StackPanel>
 
-                            <StackPanel Spacing="4">
-                                <muxc:RadioButtons
-                                    x:Name="CredentialsRadios"
-                                    AutomationProperties.Name="凭证隔离策略"
-                                    SelectionChanged="OnCredentialsModeChanged" />
+                            <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+
+                            <StackPanel Spacing="8">
+                                <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="凭证" />
                                 <TextBlock
                                     Style="{StaticResource BodyTextBlockStyle}"
                                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                     Text="继承主 home 时复用全局凭证；本实例独立时使用实例目录内的凭证，互不影响。"
                                     TextWrapping="Wrap" />
+                                <!-- 选项组容器：P3-03/P3-08 用这个 Name 定位整组（原先挂在 muxc:RadioButtons 上） -->
+                                <StackPanel Spacing="4" AutomationProperties.Name="凭证隔离策略">
+                                    <RadioButton
+                                        x:Name="CredentialsInheritRadio"
+                                        HorizontalAlignment="Left"
+                                        AutomationProperties.Name="凭证继承主 home"
+                                        Checked="OnCredentialsModeChecked"
+                                        Content="继承主 home（默认）"
+                                        GroupName="CredentialsIsolation"
+                                        Tag="inherit" />
+                                    <RadioButton
+                                        x:Name="CredentialsLocalRadio"
+                                        HorizontalAlignment="Left"
+                                        AutomationProperties.Name="凭证本实例独立"
+                                        Checked="OnCredentialsModeChecked"
+                                        Content="本实例独立"
+                                        GroupName="CredentialsIsolation"
+                                        Tag="local" />
+                                </StackPanel>
                             </StackPanel>
                         </StackPanel>
                     </Expander>

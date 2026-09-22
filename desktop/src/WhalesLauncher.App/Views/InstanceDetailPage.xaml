@@ -76,6 +76,49 @@
                 Severity="Warning"
                 IsClosable="False"
                 IsOpen="False" />
+
+            <!--
+                崩溃原因条：整段 lastError 放在**可滚动的定高容器**里。
+
+                为什么不塞进页头的一行说明（旧做法）：实例崩溃时 core 给出的 lastError
+                是"一行提示 + stderr 原文"，KREA2 那次是近千字符的单行。页头说明是
+                `TextWrapping=Wrap` 的 TextBlock，于是页头被撑成十几行 —— 右列的
+                「返回 / 打开文件夹 / 启动」按钮被顶到奇怪的位置（用户反馈"按钮位置不美观"），
+                而详情页根 Grid **自身没有 ScrollViewer**，被挤扁的日志区连滚都滚不到
+                （用户反馈"崩溃页面日志无法滚动"）。
+                现在的做法：页头只留状态/端口/地址，崩溃原文进这里，限高 160 且可滚动、
+                可选中复制，另给一个「查看日志」直接跳到日志页签。
+            -->
+            <muxc:InfoBar
+                x:Name="CrashBar"
+                Severity="Error"
+                IsClosable="False"
+                IsOpen="False"
+                Title="上次启动异常退出">
+                <muxc:InfoBar.ActionButton>
+                    <Button
+                        x:Name="ViewCrashLogButton"
+                        AutomationProperties.Name="查看崩溃日志"
+                        Click="OnViewCrashLogClick"
+                        Content="查看日志" />
+                </muxc:InfoBar.ActionButton>
+                <muxc:InfoBar.Content>
+                    <ScrollViewer
+                        MaxHeight="160"
+                        HorizontalScrollMode="Disabled"
+                        HorizontalScrollBarVisibility="Disabled"
+                        Padding="0,0,16,0"
+                        VerticalScrollBarVisibility="Auto">
+                        <TextBlock
+                            x:Name="CrashText"
+                            FontFamily="Cascadia Mono, Consolas, monospace"
+                            IsTextSelectionEnabled="True"
+                            Style="{StaticResource CaptionTextBlockStyle}"
+                            TextWrapping="Wrap" />
+                    </ScrollViewer>
+                </muxc:InfoBar.Content>
+            </muxc:InfoBar>
+
             <muxc:InfoBar
                 x:Name="ErrorBar"
                 Severity="Error"

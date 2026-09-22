@@ -142,6 +142,21 @@ export async function setBundleEnabled(root: string, meta: InstanceMeta, name: s
 }
 
 /**
+ * 换行归一：`\r\n` 与孤立的 `\r` 都变成 `\n`。
+ *
+ * 为什么必须在写入前做：WinUI 的 TextBox 用 `\r` 作段落分隔符，编辑器读入一份 CRLF 的
+ * settings.yaml 再写回，落盘的就是"只有 \r、没有 \n"的文本。dsh 的 settings 用 `yaml`
+ * 包解析，它**不把孤立的 \r 当换行**，整份文件被当成一行 → `BLOCK_AS_IMPLICIT_KEY`，
+ * 实例每次启动都崩（KREA2 实测）。而 js-yaml 接受纯 CR，所以本模块原有的
+ * `assertYaml` 拦不住这类损坏 —— 归一之后两个解析器看到的是同一份文本。
+ * @param text YAML 文本。
+ * @returns 换行统一为 `\n` 的文本。
+ */
+export function toLf(text: string): string {
+  return text.includes('\r') ? text.replace(/\r\n?/g, '\n') : text;
+}
+
+/**
  * 读取实例设置（`<home>/settings.yaml`）。
  *
  * dsh 的 settings 是 home 级单文件，因此"实例设置"就是该实例 home 下的这一份文件。
@@ -165,13 +180,15 @@ export async function readInstanceSettings(root: string, meta: InstanceMeta): Pr
  * @param yaml YAML 文本。
  */
 export async function writeInstanceSettings(root: string, meta: InstanceMeta, yaml: string): Promise<void> {
-  assertYaml(yaml);
+  // 先归一换行再校验：CR 文本会被 js-yaml 放过、却被 dsh 的解析器拒绝（见 toLf）
+  const text = toLf(yaml);
+  assertYaml(text);
   const paths = instancePaths(root, meta);
   if (meta.settings.mode === 'shared') {
     const shared = sharedSettingsFile(root);
-    await writeTextAtomic(shared, yaml);
+    await writeTextAtomic(shared, text);
   }
-  await writeTextAtomic(paths.settingsFile, yaml);
+  await writeTextAtomic(paths.settingsFile, text);
 }
 
 /**
@@ -229,10 +246,11 @@ export async function readPatchFile(profileDir: string): Promise<string | null> 
  * @param text YAML 文本。
  */
 export async function writePatchFile(profileDir: string, text: string): Promise<void> {
-  if (text.trim().length === 0) {
+  const yaml = toLf(text);
+  if (yaml.trim().length === 0) {
     throw new Error('cordis.patch.yml 不能为空（dsh 要求至少写入 "[]"），已拒绝写入');
   }
-  await writeTextAtomic(path.join(profileDir, 'cordis.patch.yml'), text);
+  await writeTextAtomic(path.join(profileDir, 'cordis.patch.yml'), yaml);
 }
 
 /**
@@ -305,6 +323,13 @@ async function readPackageMeta(packageDir: string): Promise<{ description: strin
  */
 export function validateYaml(text: string): string | null {
   if (text.trim().length === 0) return null;
+
+  // 孤立的 CR 必须先拦下：js-yaml 接受它，dsh 的 `yaml` 解析器不接受 ——
+  // 放过去就是"界面说合法、实例每次启动都崩"（见 toLf 的说明）
+  if (/\r(?!\n)/.test(text)) {
+    return '包含孤立的 CR（\\r）换行符：dsh 的 YAML 解析器不把它当换行，整份文件会被当成一行。请使用 LF 或 CRLF 换行。';
+  }
+
   try {
     parseYaml(text);
     return null;

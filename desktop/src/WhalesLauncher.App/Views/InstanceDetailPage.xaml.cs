@@ -286,9 +286,17 @@ public sealed partial class InstanceDetailPage : Page
             return;
         }
 
-        // 离开设置页前确认未保存编辑；用户选择留下时把选中项回退，避免"页签跳了但内容没换"
+        await SwitchTabAsync(tab);
+    }
+
+    /// <summary>
+    /// 切到指定页签（页签点击与「查看日志」按钮共用一条路径）。
+    ///
+    /// 离开设置页前确认未保存编辑；用户选择留下时把选中项回退，避免"页签跳了但内容没换"。
+    /// </summary>
+    private async Task SwitchTabAsync(string tab)
+    {
         var previous = _currentTab;
-        _currentTab = tab;
 
         if (previous == DetailTabs.Settings
             && FindTab(DetailTabs.Settings)?.View is InstanceSettingsView settings
@@ -297,11 +305,14 @@ public sealed partial class InstanceDetailPage : Page
             var leave = await settings.ConfirmLeaveAsync();
             if (!leave)
             {
+                // 回退选中态（ContentDialog 是模态的，期间用户点不到页签，这里只需同步 UI）
                 _currentTab = previous;
                 UpdateTabSelection();
                 return;
             }
         }
+
+        _currentTab = tab;
 
         foreach (var entry in _tabs)
         {
@@ -309,6 +320,18 @@ public sealed partial class InstanceDetailPage : Page
         }
 
         await LoadCurrentTabAsync();
+    }
+
+    /// <summary>崩溃原因条上的「查看日志」：直接切到日志页签（用户不用自己找）。</summary>
+    private async void OnViewCrashLogClick(object sender, RoutedEventArgs e)
+    {
+        if (!_tabsReady || _currentTab == DetailTabs.Logs)
+        {
+            return;
+        }
+
+        await SwitchTabAsync(DetailTabs.Logs);
+        UpdateTabSelection();
     }
 
     private TabEntry? FindTab(string key)
@@ -382,6 +405,7 @@ public sealed partial class InstanceDetailPage : Page
         Header.Description = BuildDescription(_instance, runtime);
 
         RenderProblemBar(_instance);
+        RenderCrashBar(runtime);
         RenderPrimaryAction(_instance, runtime);
 
         var parts = new List<string>
@@ -437,6 +461,29 @@ public sealed partial class InstanceDetailPage : Page
         ProblemBar.IsOpen = false;
     }
 
+    /// <summary>
+    /// 崩溃原因条：只有"崩溃且后端给了原因"时才出现。
+    ///
+    /// 原文整段呈现（可滚动、可选中），不在代码里截断 —— 用户要能把 dsh 的报错原文
+    /// 复制出去查；限高交给 XAML 里的 <c>ScrollViewer.MaxHeight</c>。没有 <c>lastError</c>
+    /// 时收起，不留一条空壳提示（规范 §9.4：不得给假保证，也不得给空信息）。
+    /// </summary>
+    private void RenderCrashBar(InstanceRuntime runtime)
+    {
+        var crashed = string.Equals(runtime.State, InstanceStateValues.Crashed, StringComparison.Ordinal);
+        var text = runtime.LastError;
+
+        if (!crashed || string.IsNullOrWhiteSpace(text))
+        {
+            CrashBar.IsOpen = false;
+            CrashText.Text = string.Empty;
+            return;
+        }
+
+        CrashText.Text = text;
+        CrashBar.IsOpen = true;
+    }
+
     private void RenderPrimaryAction(InstanceSummary instance, InstanceRuntime runtime)
     {
         var presentation = StatePresentation.For(runtime.State);
@@ -464,9 +511,12 @@ public sealed partial class InstanceDetailPage : Page
             parts.Add(runtime.Url!);
         }
 
-        if (runtime.State == InstanceStateValues.Crashed && !string.IsNullOrWhiteSpace(runtime.LastError))
+        // 崩溃原文**不**进页头：它是整段 stderr（可能近千字符），会把页头撑成十几行，
+        // 右列的动作按钮随之错位，而详情页根 Grid 不能滚动，日志区会被挤没。
+        // 原因改由 Row1 的 CrashBar 呈现（可滚动、可复制、一键跳日志页签）。
+        if (runtime.State == InstanceStateValues.Crashed)
         {
-            parts.Add($"最近错误：{runtime.LastError}");
+            parts.Add("上次启动异常退出，原因见下方提示条");
         }
 
         if (!instance.Present)
@@ -645,6 +695,7 @@ public sealed partial class InstanceDetailPage : Page
         TabBar.Visibility = Visibility.Collapsed;
         TabHost.Visibility = Visibility.Collapsed;
         ProblemBar.IsOpen = false;
+        CrashBar.IsOpen = false;
         ErrorBar.IsOpen = false;
         StatusText.Text = string.Empty;
     }

@@ -1069,7 +1069,9 @@ public sealed class InstanceCard
             ? $"在浏览器中打开 {url}"
             : (OpenUiVisibility == Visibility.Visible ? "尚未探测到界面地址" : "实例未运行");
 
-        ProblemText = ProblemOf(summary);
+        var problem = ProblemOf(summary);
+        ProblemText = Shorten(problem, ProblemMaxChars);
+        ProblemTooltip = problem;
         ProblemVisibility = string.IsNullOrWhiteSpace(ProblemText)
             ? Visibility.Collapsed
             : Visibility.Visible;
@@ -1124,6 +1126,29 @@ public sealed class InstanceCard
     public string OpenUiTooltip { get; set; }
 
     public string ProblemText { get; set; }
+
+    /// <summary>
+    /// 卡片上那条原因条的完整文本（卡片里显示的是截断版，全文放 ToolTip）。
+    ///
+    /// 为什么要截断：崩溃时 <c>runtime.lastError</c> 的首行也可能是近千字符的单行
+    /// （dsh 把整条错误链写成一行，KREA2 实测）。InfoBar 的 Message 会整段换行，
+    /// 结果卡片被撑成大半屏、操作按钮被推到看不见的地方 —— 用户反馈的"按钮位置不美观"
+    /// 与"日志看不全"有一部分就是它。
+    /// </summary>
+    public string ProblemTooltip { get; set; }
+
+    /// <summary>卡片原因条的最大字符数（再长就截断，全文进 ToolTip）。</summary>
+    private const int ProblemMaxChars = 120;
+
+    /// <summary>超长文本截断为「前 N 字符 + …」。</summary>
+    private static string Shorten(string text, int max)
+    {
+        if (text.Length <= max)
+        {
+            return text;
+        }
+
+        return string.Concat(text.AsSpan(0, max), "…");    }
 
     public Visibility ProblemVisibility { get; set; }
 

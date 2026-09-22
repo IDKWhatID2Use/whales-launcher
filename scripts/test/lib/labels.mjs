@@ -114,6 +114,17 @@ export const LABELS = Object.freeze({
       settings: '设置隔离策略',
       credentials: '凭证隔离策略',
     },
+    /**
+     * 每个维度还必须在屏幕上有一个**看得见**的小标题。AutomationProperties.Name
+     * 只喂屏幕阅读器，用户看不见 —— 少了它，页面上就是 4 组无名的「独立（默认）/
+     * 共享」，看不出每组管什么（2026-02 实测缺陷）。文案与向导第 4 步一致。
+     */
+    isolationGroupTitles: {
+      workspace: '工作区',
+      saves: '存档',
+      settings: '设置',
+      credentials: '凭证',
+    },
   },
 
   /* ---------------- P4 存档 ---------------- */
@@ -246,6 +257,7 @@ export const CHECKS = Object.freeze({
     'P3-05': '保存按钮存在（初始未修改状态可判定）',
     'P3-06': '选中页签为"设置"',
     'P3-07': '设置视图显示 settings.yaml 的路径标签',
+    'P3-08': '隔离策略每个维度都有屏幕上可见的分组标题',
   },
   'p4-detail-saves': {
     'P4-01': '存档列表或明确空态二者必居其一',

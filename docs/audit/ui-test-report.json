@@ -1,8 +1,8 @@
 {
   "schema": "whaleslauncher.ui-test-report/1",
-  "generatedAt": "2026-09-21T15:10:06.809Z",
-  "startedAt": "2026-09-21T15:06:51.178Z",
-  "durationMs": 195631,
+  "generatedAt": "2026-09-22T04:57:24.458Z",
+  "startedAt": "2026-09-22T04:54:57.930Z",
+  "durationMs": 146528,
   "framework": {
     "driver": "PowerShell 5.1 + 内置 UI Automation（UIAutomationClient / UIAutomationTypes）",
     "capture": "scripts/audit/capture-core.ps1 的 [WinAuditCore]（PrintWindow PW_RENDERFULLCONTENT + ImageStats）",
@@ -14,7 +14,7 @@
     "bridge": "F:\\WhalesLauncher\\dist\\bridge\\server.cjs",
     "node": "v26.3.0",
     "platform": "win32 10.0.26200",
-    "tmpHome": "F:\\Temp\\whales-ui-test-KMNxyw"
+    "tmpHome": "F:\\Temp\\whales-ui-test-HcmzEQ"
   },
   "expectations": {
     "instanceCount": 3,
@@ -33,8 +33,8 @@
       "0.0.1-uitest.1",
       "0.0.1-uitest"
     ],
-    "noEngineHomeDir": "F:\\Temp\\whales-ui-test-9mvaDx",
-    "emptyHomeDir": "F:\\Temp\\whales-ui-test-EfZ7z5",
+    "noEngineHomeDir": "F:\\Temp\\whales-ui-test-txnYwx",
+    "emptyHomeDir": "F:\\Temp\\whales-ui-test-0PRyaa",
     "firstInstanceName": "UI Alpha",
     "firstInstanceDir": "ui-alpha",
     "firstInstanceId": "ui-fixture-0001",
@@ -45,8 +45,8 @@
     "fixtureEngineVersion": "0.0.1-uitest"
   },
   "totals": {
-    "total": 73,
-    "passed": 72,
+    "total": 74,
+    "passed": 73,
     "failed": 0,
     "unverifiable": 1,
     "errored": 0
@@ -56,8 +56,8 @@
       "page": "shell",
       "title": "外壳（标题栏 / 左栏 / 应用菜单 / 日志抽屉 / 主题）",
       "route": "instances",
-      "startedAt": "2026-09-21T15:06:51.6676797Z",
-      "durationMs": 24105,
+      "startedAt": "2026-09-22T04:54:58.4266667Z",
+      "durationMs": 18786,
       "error": null,
       "infrastructure": false,
       "total": 11,
@@ -144,7 +144,7 @@
         }
       ],
       "diagnostics": [
-        "pid=52472 hwnd=18091968 class=WinUIDesktopWin32WindowClass route=instances",
+        "pid=39752 hwnd=19007398 class=WinUIDesktopWin32WindowClass route=instances",
         "smokeRoute='instances' ctxRoute='instances' otherWhalesProcs=0"
       ],
       "exitCode": 0,
@@ -155,8 +155,8 @@
       "page": "p1-instances",
       "title": "P1 实例列表",
       "route": "instances",
-      "startedAt": "2026-09-21T15:07:15.7880520Z",
-      "durationMs": 27551,
+      "startedAt": "2026-09-22T04:55:17.2174152Z",
+      "durationMs": 21102,
       "error": null,
       "infrastructure": false,
       "total": 12,
@@ -246,11 +246,11 @@
           "Title": "「更多」菜单里的导出项可用（实例包导出的界面入口）",
           "Kind": "existence",
           "Status": "pass",
-          "Detail": "entry '导出实例包' present=True (card0 buttons=3 ['重新启动'] ['查看实例详情'] ['更多操作']) enabled=True ct=ControlType.MenuItem offscreen=False"
+          "Detail": "entry '导出实例包' present=True (card0 buttons=3 ['启动'] ['查看实例详情'] ['更多操作']) enabled=True ct=ControlType.MenuItem offscreen=False"
         }
       ],
       "diagnostics": [
-        "pid=33612 hwnd=13896970 route=instances"
+        "pid=52944 hwnd=25954886 route=instances"
       ],
       "exitCode": 0,
       "timedOut": false,
@@ -260,8 +260,8 @@
       "page": "p2-detail-plugins",
       "title": "P2 实例详情 · 插件",
       "route": "detail/first/plugins",
-      "startedAt": "2026-09-21T15:07:43.3587447Z",
-      "durationMs": 13198,
+      "startedAt": "2026-09-22T04:55:38.3195779Z",
+      "durationMs": 10958,
       "error": null,
       "infrastructure": false,
       "total": 8,
@@ -295,7 +295,7 @@
           "Title": "切换到\"设置\"后内容真的变了",
           "Kind": "behavior",
           "Status": "pass",
-          "Detail": "pluginsMarker before=True after=False; settingsMarker before=False after=True; settings.IsSelected=True; texts 58 -> 65"
+          "Detail": "pluginsMarker before=True after=False; settingsMarker before=False after=True; settings.IsSelected=True; texts 58 -> 64"
         },
         {
           "Id": "P2-06",
@@ -327,7 +327,7 @@
         }
       ],
       "diagnostics": [
-        "pid=47492 hwnd=11143932 route=detail/first/plugins"
+        "pid=46060 hwnd=5048666 route=detail/first/plugins"
       ],
       "exitCode": 0,
       "timedOut": false,
@@ -337,12 +337,12 @@
       "page": "p3-detail-settings",
       "title": "P3 实例详情 · 设置",
       "route": "detail/first/settings",
-      "startedAt": "2026-09-21T15:07:56.5481999Z",
-      "durationMs": 6101,
+      "startedAt": "2026-09-22T04:55:49.2785811Z",
+      "durationMs": 6524,
       "error": null,
       "infrastructure": false,
-      "total": 7,
-      "passed": 7,
+      "total": 8,
+      "passed": 8,
       "failed": 0,
       "unverifiable": 0,
       "checks": [
@@ -358,14 +358,14 @@
           "Title": "编辑器行号列存在",
           "Kind": "existence",
           "Status": "pass",
-          "Detail": "gutter ct=ControlType.Edit value='1'"
+          "Detail": "gutter ct=ControlType.Edit value='1\r2\r3\r4\r5\r6\r7\r8\r9'"
         },
         {
           "Id": "P3-03",
           "Title": "隔离策略四个维度可读",
           "Kind": "existence",
           "Status": "pass",
-          "Detail": "readable groups=4/4 :: workspace: options=2 selectionItemPattern=2 longestText=63 names='独立（默认）/共享' ; saves: options=2 selectionItemPattern=2 longestText=63 names='独立（默认）/共享' ; settings: options=2 selectionItemPattern=2 longestText=63 names='独立（默认）/共享' ; credentials: options=2 selectionItemPattern=2 longestText=63 names='继承主 home（默认）/本实例独立'"
+          "Detail": "readable groups=4/4 :: workspace: options=2 selectionItemPattern=2 longestText=63 names='工作区独立/工作区共享' ; saves: options=2 selectionItemPattern=2 longestText=63 names='存档独立/存档共享' ; settings: options=2 selectionItemPattern=2 longestText=63 names='设置独立/设置共享' ; credentials: options=2 selectionItemPattern=2 longestText=63 names='凭证继承主 home/凭证本实例独立'"
         },
         {
           "Id": "P3-04",
@@ -379,7 +379,7 @@
           "Title": "保存按钮存在（初始未修改状态可判定）",
           "Kind": "existence",
           "Status": "pass",
-          "Detail": "save.IsEnabled=True reload.IsEnabled=True (unmodified document -> save disabled is correct)"
+          "Detail": "save.IsEnabled=False reload.IsEnabled=True (unmodified document -> save disabled is correct)"
         },
         {
           "Id": "P3-06",
@@ -394,10 +394,17 @@
           "Kind": "existence",
           "Status": "pass",
           "Detail": "PathText='settings.yaml' isolationSectionVisible=True"
+        },
+        {
+          "Id": "P3-08",
+          "Title": "隔离策略每个维度都有屏幕上可见的分组标题",
+          "Kind": "existence",
+          "Status": "pass",
+          "Detail": "groups with an exact visible heading directly above them = 4/4 :: workspace='工作区' visible=True above='共享时实例的工作区通过 junction 指向 shared/workspaces/<目录名>，多个实例共用同一份工作区文件。 / 工作区 / 隔离策略' ; saves='存档' visible=True above='共享时多个实例读写同一份 sessions 存档目录，任一侧的改动对其它实例立即可见。 / 存档 / 工作区隔离策略' ; settings='设置' visible=True above='共享时 settings.yaml 指向共享文件；本地与共享内容不一致时会登记共享冲突，需你显式选择以哪一侧为准。 / 设置 / 存档隔离策略' ; credentials='凭证' visible=True above='继承主 home 时复用全局凭证；本实例独立时使用实例目录内的凭证，互不影响。 / 凭证 / 设置隔离策略'"
         }
       ],
       "diagnostics": [
-        "pid=36948 hwnd=6033234 route=detail/first/settings"
+        "pid=47572 hwnd=5705836 route=detail/first/settings"
       ],
       "exitCode": 0,
       "timedOut": false,
@@ -407,8 +414,8 @@
       "page": "p4-detail-saves",
       "title": "P4 实例详情 · 存档",
       "route": "detail/first/saves",
-      "startedAt": "2026-09-21T15:08:02.6532730Z",
-      "durationMs": 19754,
+      "startedAt": "2026-09-22T04:55:55.8018932Z",
+      "durationMs": 19893,
       "error": null,
       "infrastructure": false,
       "total": 6,
@@ -460,7 +467,7 @@
         }
       ],
       "diagnostics": [
-        "pid=18112 hwnd=11537148 route=detail/first/saves"
+        "pid=50600 hwnd=8851168 route=detail/first/saves"
       ],
       "exitCode": 0,
       "timedOut": false,
@@ -470,8 +477,8 @@
       "page": "p5-detail-logs",
       "title": "P5 实例详情 · 日志",
       "route": "detail/first/logs",
-      "startedAt": "2026-09-21T15:08:22.3947411Z",
-      "durationMs": 15070,
+      "startedAt": "2026-09-22T04:56:15.6894739Z",
+      "durationMs": 15183,
       "error": null,
       "infrastructure": false,
       "total": 6,
@@ -523,7 +530,7 @@
         }
       ],
       "diagnostics": [
-        "pid=38844 hwnd=16386768 route=detail/first/logs"
+        "pid=55700 hwnd=18941774 route=detail/first/logs"
       ],
       "exitCode": 0,
       "timedOut": false,
@@ -533,8 +540,8 @@
       "page": "p6-engines",
       "title": "P6 引擎版本管理",
       "route": "engines",
-      "startedAt": "2026-09-21T15:09:07.2892013Z",
-      "durationMs": 30129,
+      "startedAt": "2026-09-22T04:56:30.8796792Z",
+      "durationMs": 30202,
       "error": null,
       "infrastructure": false,
       "total": 7,
@@ -593,18 +600,18 @@
         }
       ],
       "diagnostics": [
-        "pid=47688 hwnd=4721948 route=engines"
+        "pid=51340 hwnd=23595454 route=engines"
       ],
       "exitCode": 0,
       "timedOut": false,
-      "attempts": 2
+      "attempts": 1
     },
     {
       "page": "p7-wizard",
       "title": "P7 创建实例向导",
       "route": "create",
-      "startedAt": "2026-09-21T15:09:37.4529643Z",
-      "durationMs": 17560,
+      "startedAt": "2026-09-22T04:57:01.0837067Z",
+      "durationMs": 13612,
       "error": null,
       "infrastructure": false,
       "total": 8,
@@ -659,7 +666,7 @@
           "Title": "输入合法名后错误消失、目录名预览出现",
           "Kind": "behavior",
           "Status": "pass",
-          "Detail": "name='UI Wizard Probe' errorCleared=True DirPreview='fenUI-Wizard-Probe'"
+          "Detail": "name='UI Wizard Probe' errorCleared=True DirPreview='UI-Wizard-Probe'"
         },
         {
           "Id": "P7-02",
@@ -670,7 +677,7 @@
         }
       ],
       "diagnostics": [
-        "pid=54052 hwnd=3673902 launchRoute=create",
+        "pid=9712 hwnd=23726526 launchRoute=create",
         "create wizard reached via deep link"
       ],
       "exitCode": 0,
@@ -681,8 +688,8 @@
       "page": "p8-settings",
       "title": "P8 全局设置",
       "route": "settings",
-      "startedAt": "2026-09-21T15:09:55.0043505Z",
-      "durationMs": 12208,
+      "startedAt": "2026-09-22T04:57:14.6931916Z",
+      "durationMs": 10174,
       "error": null,
       "infrastructure": false,
       "total": 8,
@@ -730,7 +737,7 @@
           "Title": "存储位置路径与 registry 输入框可读",
           "Kind": "existence",
           "Status": "pass",
-          "Detail": "PrimaryHomeBox='C:\\Users\\jcgfw\\.dsh' ; RootDirBox='F:\\Temp\\whales-ui-test-KMNxyw' ; RegistryBox='https://registry.npmjs.org'"
+          "Detail": "PrimaryHomeBox='C:\\Users\\jcgfw\\.dsh' ; RootDirBox='F:\\Temp\\whales-ui-test-HcmzEQ' ; RegistryBox='https://registry.npmjs.org'"
         },
         {
           "Id": "P8-06",
@@ -744,11 +751,11 @@
           "Title": "版本号文案可读",
           "Kind": "existence",
           "Status": "pass",
-          "Detail": "NodeConclusion='使用 C:\\Program Files\\nodejs\\node.exe（Node v26.3.0，来源：启动器自身进程）' Version='启动器版本 1.0.1'"
+          "Detail": "NodeConclusion='使用 C:\\Program Files\\nodejs\\node.exe（Node v26.3.0，来源：启动器自身进程）' Version='启动器版本 1.0.2'"
         }
       ],
       "diagnostics": [
-        "pid=52424 hwnd=11931490 launchRoute=settings",
+        "pid=38932 hwnd=23792062 launchRoute=settings",
         "global settings reached via deep link"
       ],
       "exitCode": 0,
